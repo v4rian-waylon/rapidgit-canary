@@ -28,6 +28,7 @@
 | REQ-R-gadget-261114065910 | A gadget branch of run 261114065910 lands through its pull request. | P1 | ✅ done | ✅ `gadget-261114065910.txt` | internal | `feature/gadget-261114065910` |
 | REQ-R-gadget-261114093059 | A gadget branch of run 261114093059 lands through its pull request. | P1 | ✅ done | ✅ `gadget-261114093059.txt` | internal | `feature/gadget-261114093059` |
 | REQ-R-gadget-261114094853 | A gadget branch of run 261114094853 lands through its pull request. | P1 | ✅ done | ✅ `gadget-261114094853.txt` | internal | `feature/gadget-261114094853` |
+| REQ-R-probe12-2-095208 | Probe 2 of v12 remote check 095208 pushes with plain git push. | P1 | ✅ done | ✅ `probe12-2-095208.txt` | internal | `feature/probe12-2-095208` |
 | REQ-R-review-261114002945 | Lands of run 261114002945 go through review on the forge. | P2 | ✅ done | ✅ `review-261114002945.txt` | internal | `chore/review-261114002945` |
 | REQ-R-review-261114014554 | Lands of run 261114014554 go through review on the forge. | P2 | ✅ done | ✅ `review-261114014554.txt` | internal | `chore/review-261114014554` |
 | REQ-R-review-261114020513 | Lands of run 261114020513 go through review on the forge. | P2 | ✅ done | ✅ `review-261114020513.txt` | internal | `chore/review-261114020513` |
