@@ -1,3 +1,12 @@
 rapid land chore/review-261114055524 as v2026.8.1: merge tree f79bb2827ec49fef92181d6969e924555ef0f69c
 
 gates deferred to the close of batch b4ebc44: no gate ran on this merge tree at the land
+
+close of batch b4ebc44: gates on the final tree f79bb2827ec49fef92181d6969e924555ef0f69c
+
+gate=full
+command=true
+exit=0
+duration=0s
+at=2026-11-14T05:56:37Z
+--- log tail
