@@ -20,6 +20,7 @@
 | REQ-R-forge-261114055524 | The canary keeps the rulesets and the rapid-check workflow of run 261114055524 on the forge. | P2 | ✅ done | ✅ `forge-261114055524.txt` | internal | `chore/forge-261114055524` |
 | REQ-R-forge-261114065910 | The canary keeps the rulesets and the rapid-check workflow of run 261114065910 on the forge. | P2 | ✅ done | ✅ `forge-261114065910.txt` | internal | `chore/forge-261114065910` |
 | REQ-R-forge-261114093059 | The canary keeps the rulesets and the rapid-check workflow of run 261114093059 on the forge. | P2 | ✅ done | ✅ `forge-261114093059.txt` | internal | `chore/forge-261114093059` |
+| REQ-R-forge-261114094853 | The canary keeps the rulesets and the rapid-check workflow of run 261114094853 on the forge. | P2 | ✅ done | ✅ `forge-261114094853.txt` | internal | `chore/forge-261114094853` |
 | REQ-R-gadget-261114002945 | A gadget branch of run 261114002945 lands through its pull request. | P1 | ✅ done | ✅ `gadget-261114002945.txt` | internal | `feature/gadget-261114002945` |
 | REQ-R-gadget-261114014554 | A gadget branch of run 261114014554 lands through its pull request. | P1 | ✅ done | ✅ `gadget-261114014554.txt` | internal | `feature/gadget-261114014554` |
 | REQ-R-gadget-261114020513 | A gadget branch of run 261114020513 lands through its pull request. | P1 | ✅ done | ✅ `gadget-261114020513.txt` | internal | `feature/gadget-261114020513` |
