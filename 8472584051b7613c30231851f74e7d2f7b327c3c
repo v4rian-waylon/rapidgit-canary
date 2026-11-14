@@ -1,0 +1,12 @@
+rapid land chore/upgrade-261114093059 as v2026.11.2: merge tree 47bdd21b9909c6a91aa6c8466377e8e58ca88fdb
+
+gates deferred to the close of batch f902a2a: no gate ran on this merge tree at the land
+
+close of batch f902a2a: gates on the final tree 47bdd21b9909c6a91aa6c8466377e8e58ca88fdb
+
+gate=full
+command=true
+exit=0
+duration=0s
+at=2026-11-14T09:31:07Z
+--- log tail

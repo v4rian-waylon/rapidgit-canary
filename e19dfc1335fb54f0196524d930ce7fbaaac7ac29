@@ -1,0 +1,15 @@
+rapid land feature/gadget-261114093059 as v2026.12.2: merge tree 0895f5c3bfc87438f350287ef1c5b9efe427c545
+
+gate=fast
+command=true
+exit=0
+duration=0s
+at=2026-11-14T09:32:51Z
+--- log tail
+
+gate=full
+command=true
+exit=0
+duration=0s
+at=2026-11-14T09:32:51Z
+--- log tail

@@ -1,0 +1,12 @@
+rapid land chore/forge-261114093059 as v2026.11.3: merge tree 9aed94d074bb0dc958f30069a68a921ba937b676
+
+gates deferred to the close of batch 8472584: no gate ran on this merge tree at the land
+
+close of batch 8472584: gates on the final tree 9aed94d074bb0dc958f30069a68a921ba937b676
+
+gate=full
+command=true
+exit=0
+duration=0s
+at=2026-11-14T09:31:23Z
+--- log tail
