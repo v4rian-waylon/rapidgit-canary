@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# commit-msg - the message rules (lib/message.sh) on every commit, and no commit
+# on dev or main: those move only through 'rapid land' and 'rapid release'. A
+# commit that changes .rapid/conf or .rapid/admins is a policy flip: its own
+# [MODE] commit, by an admin listed in .rapid/admins on dev (lib/policy.sh).
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# judged by dev's framework, never by the branch's own copy (lib/judge.sh)
+. "$here/lib/judge.sh"; rapid_judge_exec "$here" hooks/commit-msg "$@"
+. "$here/lib/core.sh"
+for l in "$here"/lib/*.sh; do case "${l##*/}" in core.sh|judge.sh|reqs-fix.sh|reqs-merge.sh) ;; *) . "$l" ;; esac; done
+b=$(rapid_branch)
+case "$b" in
+  dev|main)
+    echo "X commit-msg: no commit on $b; start a branch (rapid branch <kind> <slug>) and land it" >&2; exit 1 ;;
+esac
+out=$(rapid_msg_violations "$1")
+# the commit-audit smells that read the diff, on the staged change (an amend is judged against HEAD's parent)
+base=HEAD
+case " $(ps -o args= -p "$PPID" 2>/dev/null || true) " in *" --amend "*) base=HEAD^ ;; esac
+if git rev-parse -q --verify "$base^{commit}" >/dev/null; then
+  pr=0; [ -z "$(rapid_trailer "$base" Red)" ] || pr=1
+  sm=$(RAPID_CONF_REV="$(git rev-parse -q --verify refs/heads/dev || true)" rapid_diff_smells "$(grep -v '^#' "$1" | sed -n 1p)" "$(git diff --cached --numstat -M "$base")" "$pr" \
+    "$(grep -v '^#' "$1" | git interpret-trailers --parse | sed -nE 's/^Proof: (.*)$/\1/p' | sed -n 1p)")
+  out=$(printf '%s\n%s\n' "$out" "$sm" | sed '/^$/d')
+fi
+ai=$(git var GIT_AUTHOR_IDENT 2>/dev/null || true); ci=$(git var GIT_COMMITTER_IDENT 2>/dev/null || true)
+an=$(sed -E 's/^(.*) <[^>]*>.*$/\1/' <<<"$ai"); ae=$(sed -nE 's/^.* <([^>]*)>.*$/\1/p' <<<"$ai")
+ce=$(sed -nE 's/^.* <([^>]*)>.*$/\1/p' <<<"$ci")
+export RAPID_CONF_REV; RAPID_CONF_REV=$(git rev-parse -q --verify refs/heads/dev || true)
+idp=""
+# a staged policy file makes this a policy flip (a [MODE] commit that stages none, as an amend of
+# its message does, is judged by land, which sees the whole commit)
+files=$(git diff --cached --name-only 2>/dev/null || true)
+hit=""; for f in $files; do case " $RAPID_POLICY_FILES " in *" $f "*) hit=1 ;; esac; done
+if [ -n "$hit" ]; then
+  pf=$(rapid_policy_flip_problem "$(grep -v '^#' "$1" | sed -n 1p)" "$files" "$ae" "$an" "$ce")
+  [ -z "$pf" ] || idp="${idp:+$idp
+}$pf"
+fi
+if [ -n "$out" ] || [ -n "$idp" ]; then
+  echo "X commit-msg: the commit breaks the rules:" >&2
+  printf '%s\n' "$out" "$idp" | sed '/^$/d; s/^/  - /' >&2
+  [ -z "$out" ] || {
+    echo "  Subject: [${RAPID_TAGS// /|}] Capitalised summary, $RAPID_SUBJ_MIN to $RAPID_SUBJ_MAX chars, no final period." >&2
+    echo "  A test-first commit that fails its test on purpose carries one trailer: Red: <test name>." >&2
+    echo "  One concern per commit, with its test; a [FIX] body says Cause: then Fix: (RULES.md, Commits)." >&2; }
+  [ -z "$idp" ] || echo "  The admins come from .rapid/admins as committed on dev." >&2
+  exit 1
+fi

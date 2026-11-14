@@ -1,0 +1,8 @@
+{
+  "name": "rapid-branch-deletions",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": { "ref_name": { "include": ["refs/heads/pool/*", "refs/heads/pool/*/*"], "exclude": [] } },
+  "rules": [ { "type": "deletion" } ],
+  "bypass_actors": [ { "actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always" } ]
+}

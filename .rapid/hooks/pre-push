@@ -1,0 +1,279 @@
+#!/usr/bin/env bash
+# pre-push - the client-side line for what reaches a shared remote. The
+# server rulesets (rapid setup --remote) are the authority on a forge; this
+# hook keeps honest pushes inside the same rules everywhere, offline remotes
+# included.
+#   - only dev, main, pool/v<series>/n<N>.<kind>.<slug>, safety/... and vault/... branches
+#   - dev and main are never deleted or rewritten; every new first-parent
+#     commit on dev is a landed merge that passes I1 to I4 and I8
+#   - main only moves by release merges "[MERGE] dev into main: <version>"
+#     of a dev commit carrying release/<version>, with its tree (I5); main is
+#     production, so that tag is annotated and its tagger is an admin listed
+#     in .rapid/admins at the main it moves from (lib/policy.sh)
+#   - version and release tags are created once, never moved or deleted,
+#     and a version tag sits on the merge whose subject names it; a release
+#     tag, which opens the next series even without main, is the owner's
+#     like main itself
+#   - branch commits carry ruled messages and add no banned file, and a policy flip only in
+#     an admin's [MODE] commit (dev's .rapid/admins); a branch is deleted only
+#     once dev holds it (land, or rapid branch --delete-landed after it): a branch never
+#     landed stays a branch
+#   - a branch push holds at most max_commits commits; it runs no gate (a branch
+#     push is transport: the close tests the tree it pushes, once)
+#   - safety anchors (refs/heads/safety/v<series>/<name>) and
+#     vault branches (refs/heads/vault/...) stay forever: never deleted
+#     or moved, and a branch push takes its anchor along (pushing it
+#     first when the remote lacks it), and with it the branch's number
+#     reservation refs/heads/safety/numbers/<number>
+set -euo pipefail
+# git runs the hook from the work tree's root, and from a linked work tree it
+# exports GIT_DIR: every git -C on a private work tree (the fast gate rerun on a
+# foreign dev merge) would then act on this work tree's index and HEAD. The root is
+# enough for git to find the repository.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# judged by dev's framework, never by the branch's own copy (lib/judge.sh)
+. "$here/lib/judge.sh"; rapid_judge_exec "$here" hooks/pre-push "$@"
+. "$here/lib/core.sh"
+for l in "$here"/lib/*.sh; do case "${l##*/}" in core.sh|judge.sh|reqs-fix.sh|reqs-merge.sh) ;; *) . "$l" ;; esac; done
+zero=0000000000000000000000000000000000000000
+remote="${1:-origin}"
+fail() { echo "X pre-push: $*" >&2; exit 1; }
+lines=$(cat)
+# a batch is one push: while a batch is open nothing reaches a remote but the
+# close's own push (rapid land sets RAPID_BATCH_CLOSE_PUSH for it)
+bf="$(git rev-parse --git-common-dir)/rapid/batch"
+if [ -s "$bf" ] && [ "${RAPID_BATCH_CLOSE_PUSH:-}" != 1 ] && [ -n "$lines" ]; then
+  fail "a batch is open since dev $(git rev-parse --short "$(cat "$bf")" 2>/dev/null || true); rapid land publishes it in one push and nothing else is pushed until then (rapid land --prune drops the batch)"
+fi
+# release_gov C: the main whose policy judges a release tag on C: main as this
+# push moves it from, else origin's main, else this clone's main, else C's root.
+release_gov() {
+  local m
+  m=$(awk -v z="$zero" '$3 == "refs/heads/main" { print ($4 == z ? "" : $4) }' <<<"$lines" | sed -n 1p)
+  [ -n "$m" ] || m=$(git ls-remote "$remote" refs/heads/main 2>/dev/null | cut -f1)
+  if [ -z "$m" ] || ! git cat-file -e "$m^{commit}" 2>/dev/null; then m=$(git rev-parse -q --verify refs/heads/main || true); fi
+  [ -n "$m" ] || m=$(git rev-list --max-parents=0 --first-parent "$1" | tail -n 1)
+  printf '%s' "$m"
+}
+# the version tags this push carries (a dev merge must arrive with its tag)
+pushed_tags=""
+while read -r _l _s r _r; do
+  [[ "${r:-}" == refs/tags/v* ]] && pushed_tags="$pushed_tags${r#refs/tags/}
+"
+done <<<"$lines"
+while read -r lref lsha rref rsha; do
+  [ -n "${rref:-}" ] || continue
+  case "$rref" in
+    refs/tags/*)
+      t="${rref#refs/tags/}"
+      case "$t" in v[0-9]*|release/*) ;; *) continue ;; esac
+      [ "$lsha" != "$zero" ] || fail "tag $t is never deleted"
+      [ "$rsha" = "$zero" ] || fail "tag $t already exists on $remote and is never moved"
+      c=$(git rev-parse "$lsha^{commit}")
+      case "$t" in
+        v*)
+          [ "$(git cat-file -t "$lsha")" = tag ] || fail "version tag $t must be annotated (made by rapid land)"
+          s=$(git log -1 --format=%s "$c")
+          case "$s" in "[MERGE] "*": $t") ;; *) fail "tag $t is not on the merge that names it" ;; esac ;;
+        release/*)
+          [ -n "$(git tag --points-at "$c" -l "${t#release/}")" ] || fail "tag $t is not on the commit tagged ${t#release/}"
+          [ "$(git cat-file -t "$lsha")" = tag ] || fail "release tag $t must be annotated (made by rapid release)"
+          # a release tag alone opens the next series: it is the owner's, by the policy at main as it
+          # stands (a release cut before the framework knew the owner rule is not judged by it, as in I5)
+          if git show "$c:.rapid/lib/policy.sh" 2>/dev/null | grep -F 'release_who' >/dev/null; then
+            gov=$(release_gov "$c")
+            tagger=$(git for-each-ref --format='%(taggeremail)' "refs/tags/$t" | tr -d '<>')
+            why=$(rapid_policy_may_release "$gov" "$c" "$tagger") \
+              || fail "release tag $t was tagged by '${tagger:-<none>}': $why"
+            why=$(rapid_release_sig_problem "refs/tags/$t" "$gov" "$c"); [ -z "$why" ] || fail "release tag $why"
+          fi ;;
+      esac ;;
+    refs/heads/dev|refs/heads/main)
+      b="${rref#refs/heads/}"
+      [ "$lsha" != "$zero" ] || fail "$b is never deleted"
+      if [ "$rsha" != "$zero" ]; then
+        git cat-file -e "$rsha^{commit}" 2>/dev/null || fail "$b on $remote is at a commit this clone lacks; fetch first"
+        git merge-base --is-ancestor "$rsha" "$lsha" || fail "$b only moves forward"
+        range="$rsha..$lsha"
+      else
+        range="$lsha"
+      fi
+      root=$(git rev-list --max-parents=0 --first-parent "$lsha" | tail -n 1)
+      if [ "$b" = dev ]; then
+        # every new merge's I1-I4/I8 check runs at once (one worker per core); results are read in order
+        mlist=""; mi=0; pd=$(mktemp -d "${TMPDIR:-/tmp}/rapid-prepush.XXXXXX")
+        for c in $(git rev-list --first-parent --reverse $range); do
+          [ "$c" = "$root" ] && continue
+          read -r v rel <<<"$(rapid_version_last "$c^1")"
+          mlist="$mlist$c ${v:--} $rel"$'\n'
+        done
+        rapid_check_merges_par "$pd" <<<"$mlist"
+        for c in $(git rev-list --first-parent --reverse $range); do
+          [ "$c" = "$root" ] && continue
+          mi=$((mi + 1))
+          out=$(grep -v '^OK ' "$pd/$mi" || true)
+          [ -z "$out" ] || { printf '%s\n' "$out" | sed 's/^/  /' >&2; fail "dev only takes merges made by rapid land"; }
+          mv=$(rapid_version_of "$c")
+          if ! grep -Fx -- "$mv" <<<"$pushed_tags" >/dev/null && [ -z "$(git ls-remote --tags "$remote" "refs/tags/$mv" 2>/dev/null)" ]; then
+            fail "merge $(git rev-parse --short "$c") reaches dev without its tag $mv; push dev with its tags (rapid land, or rapid sync --dev)"
+          fi
+          # a merge this clone did not gate (no proof note carrying this clone's id) has its fast gate rerun here
+          note=$(git notes --ref=rapid-proof show "$c" 2>/dev/null || true)
+          if [[ "$note" != *"tree=$(git rev-parse "$c^{tree}") clone=$(rapid_clone_id)"* ]]; then
+            out=$(rapid_prove_merge "$c" fast)
+            [ -z "$out" ] || { printf '%s\n' "$out" | sed 's/^/  /' >&2; fail "merge $(git rev-parse --short "$c") fails its fast gate; its Gates: receipt does not hold"; }
+          fi
+        done
+        rm -rf "$pd"
+      else
+        if [ "$lsha" != "$root" ]; then
+          # main only takes release merges of released dev commits (I5); a seed of an existing
+          # repository may carry a main from before release merges, a released dev commit
+          from=""; [ "$rsha" = "$zero" ] || from="$rsha"
+          devc=$(git rev-parse -q --verify refs/heads/dev || printf '%s' "$lsha")
+          out=$(rapid_main_check "$lsha" "$devc" "$from")
+          [ -z "$out" ] || { printf '%s\n' "$out" | sed 's/^/  /' >&2; fail "main only moves by a release merge made by rapid release ([MERGE] dev into main: <version>)"; }
+          # main is production: each release was made by the owner, as the main it moved from says
+          rels=""
+          for c in $(git rev-list --first-parent ${from:+"^$from"} "$lsha"); do
+            [[ "$(git log -1 --format=%s "$c")" == "[MERGE] dev into main: "* ]] || continue
+            rels="$rels $c"
+          done
+          [ -n "$rels" ] || [ -n "$from" ] || rels="-$lsha"   # a seeded main from before release merges
+          for c in $rels; do
+            case "$c" in -*) c="${c#-}"; rc="$c"; gov="$root" ;; *) rc=$(git rev-parse "$c^2"); gov=$(git rev-parse "$c^1") ;; esac
+            v=$(rapid_version_of "$rc")
+            [ -n "$v" ] && [ "$(git cat-file -t "refs/tags/release/$v" 2>/dev/null)" = tag ] \
+              || fail "main only moves to a release made by rapid release (an annotated release/<version>)"
+            tagger=$(git for-each-ref --format='%(taggeremail)' "refs/tags/release/$v" | tr -d '<>')
+            why=$(rapid_policy_may_release "$gov" "$rc" "$tagger") \
+              || fail "release/$v was tagged by '${tagger:-<none>}': $why"
+            why=$(rapid_release_sig_problem "refs/tags/release/$v" "$gov" "$rc"); [ -z "$why" ] || fail "release tag $why"
+          done
+        fi
+      fi ;;
+    refs/heads/pool/*)
+      rapid_branch_parse "$rref" >/dev/null || fail "${rref#refs/heads/} is not pool/v<series>/<number>.<kind>.<slug>"
+      if [ "$lsha" = "$zero" ]; then
+        # developers never delete a branch: it leaves only once dev holds it, in
+        # the same push (land: dev's new tip holds the branch) or already (a merge
+        # through the PR, or rapid branch --delete-landed after the land)
+        moved=0
+        while read -r _l s2 r2 _r; do
+          case "$r2" in
+            refs/heads/dev) [ "$s2" != "$zero" ] && git merge-base --is-ancestor "$rsha" "$s2" 2>/dev/null && moved=1 ;;
+          esac
+        done <<<"$lines"
+        # or it already landed there: GitHub merged it through its PR (land --pr under land_pr=required)
+        if [ "$moved" = 0 ] && git rev-parse -q --verify "refs/remotes/$remote/dev" >/dev/null \
+           && git merge-base --is-ancestor "$rsha" "refs/remotes/$remote/dev" 2>/dev/null; then moved=1; fi
+        # or rapid deletes it apart, after the land: dev here holds it
+        if [ "$moved" = 0 ] && git rev-parse -q --verify refs/heads/dev >/dev/null \
+           && git merge-base --is-ancestor "$rsha" refs/heads/dev 2>/dev/null; then moved=1; fi
+        [ "$moved" = 1 ] || fail "${rref#refs/heads/} is never deleted by hand (developers never delete a branch); land it, or leave it as a branch not landed yet"
+        continue
+      fi
+      # land --pr publishes the merge itself as the branch's head for review
+      if [ "$(git rev-list --parents -n1 "$lsha" | wc -w | tr -d ' ')" = 3 ]; then
+        read -r v rel <<<"$(rapid_version_last "$lsha^1")"
+        out=$(rapid_check_merge "$lsha" "$v" "$rel" | grep -v '^OK ' | grep -v '^I2 .* carries 0 version tags' || true)
+        [ -z "$out" ] || { printf '%s\n' "$out" | sed 's/^/  /' >&2; fail "a branch head that is a merge must be one rapid land --pr made"; }
+        lsha=$(git rev-parse "$lsha^2")
+      fi
+      # a branch stays within max_commits
+      if rapid_branch_open "$rref" && dev=$(git rev-parse -q --verify refs/heads/dev); then
+        base=$(git merge-base "$dev" "$lsha")
+        n=$(git rev-list --count "$base..$lsha")
+        max=$(RAPID_CONF_REV="$dev" rapid_policy_max_commits)
+        [ "$n" -le "$max" ] || fail "${rref#refs/heads/} carries $n commits, above max_commits=$max; split it into branches of one concern each"
+        # a branch push is transport: no gate runs here; the batch close tests the tree it pushes
+      fi
+      # the branch's safety anchor goes with it: it is written where it is missing
+      # (a branch made by hand or before anchors), then pushed unless the remote
+      # holds it or this push carries it
+      an=$(rapid_anchor_ref "$rref")
+      if ! git rev-parse -q --verify "$an" >/dev/null && dev=$(git rev-parse -q --verify refs/heads/dev); then
+        rapid_anchor_make "$rref" "$(git merge-base "$dev" "$lsha")" "$remote" >/dev/null
+      fi
+      # with the anchor goes the branch's number reservation (refs/heads/safety/numbers/<number>)
+      for an in $(rapid_anchor_refs "$rref"); do
+        git rev-parse -q --verify "$an" >/dev/null || continue
+        ! grep -E " $an [0-9a-f]+$" <<<"$lines" >/dev/null || continue
+        ra=$(git ls-remote "$remote" "$an" 2>/dev/null | cut -f1 || true)
+        if [ -z "$ra" ]; then
+          git push -q "$remote" "$an:$an" </dev/null || fail "could not push ${an}, the safety anchor of ${rref#refs/heads/}"
+        elif [ "$ra" != "$(git rev-parse "$an")" ]; then
+          case "$an" in
+            refs/heads/safety/numbers/*) fail "$remote holds another $an (another branch took this number); carry this branch's commits to a new branch (rapid branch)" ;;
+            *) fail "$remote holds another $an (a branch of this name forked elsewhere); rename this branch (rapid branch --rename)" ;;
+          esac
+        fi
+      done
+      for c in $(git rev-list "$lsha" --not --remotes="$remote" 2>/dev/null); do
+        f=$(mktemp "${TMPDIR:-/tmp}/rapid-msg.XXXXXX"); git log -1 --format=%B "$c" >"$f"
+        out=$(rapid_msg_violations "$f"); rm -f "$f"
+        [ -z "$out" ] || fail "commit $(git rev-parse --short "$c") breaks the message rules: $(tr '\n' ';' <<<"$out")"
+        a=$(RAPID_CONF_REV=$(git rev-parse -q --verify refs/heads/dev || true) rapid_signed_problem "$c"); [ -z "$a" ] || fail "commit $a"
+        a=$(RAPID_CONF_REV=$(git rev-parse -q --verify refs/heads/dev || true) rapid_commit_smells "$c")
+        [ -z "$a" ] || fail "commit $(git rev-parse --short "$c") fails the commit audit: $(tr '\n' ';' <<<"$a")"
+        # a policy flip is an admin's [MODE] commit, wherever it travels
+        a=$(RAPID_CONF_REV=$(git rev-parse -q --verify refs/heads/dev || true) rapid_policy_flip_commit "$c")
+        [ -z "$a" ] || fail "commit $(git rev-parse --short "$c"): policy: $(tr '\n' ';' <<<"$a")"
+        bf=$(git diff-tree -r --root --no-commit-id --name-only --diff-filter=ACMR "$c" | while IFS= read -r f; do rapid_banned "$f"; done)
+        [ -z "$bf" ] || fail "commit $(git rev-parse --short "$c") adds banned file(s): $(tr '\n' ' ' <<<"$bf")(secrets, keys, builds, .env, archives never enter history)"
+      done ;;
+    refs/heads/safety/*|refs/heads/vault/*)
+      # neo-git's anchor and vault branches stay forever: created once by rapid, never deleted or moved
+      [ "$lsha" != "$zero" ] || fail "${rref#refs/heads/} is never deleted (safety anchors and vault branches stay forever)"
+      [ "$rsha" = "$zero" ] || [ "$rsha" = "$lsha" ] || fail "${rref#refs/heads/} already exists on $remote and is never moved"
+      case "$rref" in
+        refs/heads/safety/dev-*)
+          # the snapshot of a dev a re-land replaced (rapid sync --dev): the merge rapid land made at its tip
+          [ -n "$(rapid_subject_branch "$(git log -1 --format=%s "$lsha")")" ] \
+            || fail "${rref#refs/heads/} must be the dev a re-land replaced (a merge rapid land made)" ;;
+        refs/heads/safety/*)
+          [ "$(git rev-list --parents -n1 "$lsha" | wc -w | tr -d ' ')" = 2 ] \
+            && case "$(git log -1 --format=%s "$lsha")" in "rapid branch "*": fork point "*) true ;; *) false ;; esac \
+            || fail "${rref#refs/heads/} must be the anchor commit rapid branch writes (one parent, the fork point)"
+          # an anchor names its own branch: no anchor is forged under another branch's name
+          an_name=$(git log -1 --format=%s "$lsha" | sed -nE 's/^rapid branch (.*): fork point .*/\1/p')
+          case "$rref" in
+            refs/heads/safety/numbers/*)
+              # a branch made by hand or before numbers took its number at land: its name carries none
+              an_num=$(rapid_branch_number "pool/$an_name")
+              [ -z "$an_num" ] || [ "$an_num" = "${rref#refs/heads/safety/numbers/}" ] \
+                || fail "${rref#refs/heads/} names branch $an_name, which carries another number" ;;
+            *)
+              # rapid branch --rename keeps the anchor commit: same kind and number, a new slug
+              ref_name="${rref#refs/heads/safety/}"; an_num=$(rapid_branch_number "pool/$an_name")
+              [ "$an_name" = "$ref_name" ] \
+                || { [ -n "$an_num" ] && [ "${an_name%%/*}" = "${ref_name%%/*}" ] && [ "$an_num" = "$(rapid_branch_number "pool/$ref_name")" ]; } \
+                || fail "${rref#refs/heads/} is the anchor of branch $an_name, not of this one" ;;
+          esac ;;
+        *)
+          okv=0
+          git merge-base --is-ancestor "$lsha" refs/heads/dev 2>/dev/null && okv=1
+          while read -r _l s2 r2 _r; do
+            [ "$r2" = refs/heads/dev ] && [ "$s2" != "$zero" ] && git merge-base --is-ancestor "$lsha" "$s2" 2>/dev/null && okv=1
+          done <<<"$lines"
+          # or the remote's dev already holds it (a merge through the PR, land --pr)
+          if [ "$okv" = 0 ]; then
+            rd=$(git ls-remote "$remote" refs/heads/dev 2>/dev/null | cut -f1)
+            [ -n "$rd" ] && git cat-file -e "$rd^{commit}" 2>/dev/null && git merge-base --is-ancestor "$lsha" "$rd" 2>/dev/null && okv=1
+          fi
+          [ "$okv" = 1 ] || fail "${rref#refs/heads/} must be a landed branch's tip, which dev holds" ;;
+      esac ;;
+    refs/heads/*) fail "branch ${rref#refs/heads/} is not dev, main, pool/v<series>/<number>.<kind>.<slug>, safety/... or vault/..." ;;
+    refs/notes/rapid) ;;
+    refs/notes/gates)
+      # the durable gate log only grows: never deleted, never rewritten
+      [ "$lsha" != "$zero" ] || fail "refs/notes/gates (the gate log archive) is never deleted"
+      if [ "$rsha" != "$zero" ]; then
+        git cat-file -e "$rsha^{commit}" 2>/dev/null || fail "refs/notes/gates on $remote is at a commit this clone lacks; rapid land fetches it first"
+        git merge-base --is-ancestor "$rsha" "$lsha" || fail "refs/notes/gates (the gate log archive) only moves forward; it is never rewritten"
+      fi ;;
+    *) ;;
+  esac
+done <<<"$lines"
+exit 0

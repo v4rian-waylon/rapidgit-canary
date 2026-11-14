@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# trackers/jira - the tracker contract (lib/tracker.sh) over JIRA's REST API
+# (version 2, Cloud and Data Center), through curl. A ticket id is the issue key.
+#
+#   get KEY                           GET  /rest/api/2/issue/KEY?fields=summary,description,status
+#   link KEY --branch <branch>          POST /rest/api/2/issue/KEY/comment
+#   transition KEY --to done --ref V  GET then POST /rest/api/2/issue/KEY/transitions (a comment names V)
+#
+# Credentials, from the environment only (with one missing the adapter refuses by name):
+#   RAPID_JIRA_URL    the site, https://<team>.atlassian.net or your own https host
+#   RAPID_JIRA_TOKEN  an API token (Cloud) or a personal access token (Data Center)
+#   RAPID_JIRA_USER   the account the API token belongs to (Cloud, Basic auth);
+#                     without it the token is sent as a Bearer token
+# The token never reaches a command line: curl reads the header from stdin.
+# Settings: RAPID_JIRA_STATUS_DONE, _IN_PROGRESS, _IN_REVIEW name the status a
+# state maps to (defaults "Done", "In Progress", "In Review").
+set -euo pipefail
+T_NAME=jira
+# shellcheck source=/dev/null
+. "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+t_args "$@"
+t_need curl
+url="${RAPID_JIRA_URL:-}"; url="${url%/}"
+[ -n "$url" ] || t_die "no JIRA site: set RAPID_JIRA_URL in the environment (https://<team>.atlassian.net)"
+[[ "$url" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._/-]*)?$ ]] || t_die "RAPID_JIRA_URL must be an https URL, got '$url'"
+[ -n "${RAPID_JIRA_TOKEN:-}" ] || t_die "no JIRA credential: set RAPID_JIRA_TOKEN in the environment"
+if [ -n "${RAPID_JIRA_USER:-}" ]; then
+  auth="Basic $(printf '%s:%s' "$RAPID_JIRA_USER" "$RAPID_JIRA_TOKEN" | base64 | tr -d '\n')"
+else
+  [[ "$RAPID_JIRA_TOKEN" =~ ^[A-Za-z0-9._~+/=-]+$ ]] || t_die "RAPID_JIRA_TOKEN is not a bearer token; set RAPID_JIRA_USER to send it as an API token"
+  auth="Bearer $RAPID_JIRA_TOKEN"
+fi
+# jcurl METHOD PATH [JSON]: one call; the Authorization header goes in on stdin
+jcurl() {
+  local a=(-fsS --proto '=https' -K - -X "$1" -H "Accept: application/json")
+  [ $# -lt 3 ] || a+=(-H "Content-Type: application/json" --data-binary "$3")
+  printf 'header = "Authorization: %s"\n' "$auth" | curl "${a[@]}" "$url/rest/api/2/issue/$2"
+}
+# jbody TEXT: {"body": TEXT}
+jbody() { python3 -c 'import json, sys; print(json.dumps({"body": sys.argv[1]}))' "$1"; }
+case "$T_OP" in
+  get)
+    out=$(jcurl GET "$T_KEY?fields=summary,description,status") || t_die "JIRA did not return $T_KEY" 1
+    t_ticket "$T_KEY" "$url/browse/$T_KEY" <<<"$out" ;;
+  link)
+    jcurl POST "$T_KEY/comment" "$(jbody "$(t_link_text)")" >/dev/null || t_die "JIRA refused the comment on $T_KEY" 1
+    t_ok ;;
+  transition)
+    var="RAPID_JIRA_STATUS_$(printf '%s' "$T_TO" | tr 'a-z-' 'A-Z_')"
+    case "$T_TO" in in-progress) def="In Progress" ;; in-review) def="In Review" ;; *) def="Done" ;; esac
+    status="${!var:-$def}"
+    out=$(jcurl GET "$T_KEY/transitions") || t_die "JIRA did not list the transitions of $T_KEY" 1
+    id=$(python3 -c '
+import json, sys
+want = sys.argv[1].lower()
+for t in json.load(sys.stdin).get("transitions", []):
+    if want in (str(t.get("name", "")).lower(), str((t.get("to") or {}).get("name", "")).lower()):
+        print(t.get("id", "")); break' "$status" <<<"$out") || t_die "JIRA's transitions of $T_KEY are not JSON" 1
+    [[ "$id" =~ ^[0-9]+$ ]] || t_die "$T_KEY has no transition to '$status' from its current status (set $var)" 1
+    jcurl POST "$T_KEY/transitions" "{\"transition\": {\"id\": \"$id\"}}" >/dev/null || t_die "JIRA refused the transition of $T_KEY to '$status'" 1
+    [ "$T_TO" != done ] || jcurl POST "$T_KEY/comment" "$(jbody "$(t_done_text)")" >/dev/null || t_die "$T_KEY moved to '$status' but JIRA refused the comment" 1
+    t_ok ;;
+esac

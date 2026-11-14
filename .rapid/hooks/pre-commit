@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# pre-commit - the earliest catch, before a branch commit exists. On every
+# branch, for humans as for agents: no banned file (secrets, keys, builds,
+# .env, archives; rapid_banned in lib/core.sh) is added by the staged set. On a branch
+# branch: a branch's first commit never carries the placeholder requirement,
+# REQUIREMENTS.md is regenerated from the staged requirement files and staged
+# with them (lib/reqs.sh), and when dev's conf sets gates_commit, the staged
+# tree must pass it (run on a copy of the index, so unstaged edits never
+# change the verdict).
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+. "$here/lib/core.sh"
+for l in "$here"/lib/*.sh; do case "${l##*/}" in core.sh|judge.sh|reqs-fix.sh|reqs-merge.sh) ;; *) . "$l" ;; esac; done
+fail() { echo "X pre-commit: $*" >&2; exit 1; }
+# the staged set adds no banned file (deleting one, to undo a leak, is fine)
+bad=""
+while IFS= read -r -d '' p; do
+  if [ -n "$(rapid_banned "$p")" ]; then bad="$bad $p"; fi
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+[ -z "$bad" ] || fail "banned file(s) staged:$bad. Secrets, keys, certificates, build output, node_modules, .env, *.zip and *.bak never enter history; unstage them (git restore --staged <path>) and keep them out (.gitignore)"
+b=$(rapid_branch)
+rapid_branch_open "$b" || exit 0
+ks=$(rapid_branch_parse "$b") || exit 0
+set -- $ks; slug="$2"
+dev=$(git rev-parse -q --verify refs/heads/dev) || exit 0
+export RAPID_CONF_REV="$dev"
+if git cat-file -e ":requirements/$slug.md" 2>/dev/null \
+   && git show ":requirements/$slug.md" | grep -F "$RAPID_REQ_PLACEHOLDER" >/dev/null; then
+  fail "requirements/$slug.md still holds the placeholder; state the requirement this branch meets and how its tests prove it, git add it, and commit again"
+fi
+# the register is generated: REQUIREMENTS.md follows the staged requirement files, staged with them
+if ! err=$(rapid_reqs_write_index 2>&1); then
+  printf '%s\n' "$err" >&2
+  fail "the requirement files break the register model (above); fix them and commit again"
+fi
+if [ "$(rapid_conf signed optional)" = required ] && [ "$(git config --get commit.gpgsign || true)" != true ]; then
+  fail "signed=required and commit.gpgsign is not true: set it (git config commit.gpgsign true) with a signing key, or commit with -S"
+fi
+if [ -n "$(rapid_conf gates_commit "")" ]; then
+  tmp=$(rapid_tmpdir commit)
+  git checkout-index -a --prefix="$tmp/"
+  if ! r=$(rapid_gate commit "$tmp"); then rm -rf "$tmp"; fail "gates_commit fails on the staged tree (above); fix it before committing"; fi
+  rm -rf "$tmp"
+fi
+exit 0

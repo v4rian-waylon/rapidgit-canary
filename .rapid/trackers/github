@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# trackers/github - the tracker contract (lib/tracker.sh) over the GitHub
+# issues of origin, through gh. A ticket id is GH-<issue number>.
+#
+#   get GH-N                          gh issue view N --json number,title,body,state,url
+#   link GH-N --branch <branch>         gh issue comment N
+#   transition GH-N --to done --ref V gh issue close N --comment (other states comment)
+#
+# Credential: GH_TOKEN or GITHUB_TOKEN in the environment, else the login gh
+# itself keeps (gh auth login); with neither the adapter refuses by name.
+# Settings: RAPID_GITHUB_REPO=owner/repo when origin is not the issues' repository.
+set -euo pipefail
+T_NAME=github
+# shellcheck source=/dev/null
+. "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+t_args "$@"
+[[ "$T_KEY" =~ ^GH-[0-9]+$ ]] || t_die "a GitHub ticket id is GH-<issue number>, got '$T_KEY'"
+t_need gh "https://cli.github.com"
+[ -n "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ] || gh auth token >/dev/null 2>&1 \
+  || t_die "no GitHub credential: set GH_TOKEN in the environment (or sign gh in once: gh auth login)"
+# owner/repo from https://[user@]host/o/r, ssh://git@host[:port]/o/r and git@host:o/r
+repo="${RAPID_GITHUB_REPO:-$(git config --get remote.origin.url 2>/dev/null | sed -E 's|^[a-z+]+://([^@/]+@)?[^/]+/||; s|^[^@/]+@[^:/]+:||; s|\.git$||; s|/$||' || true)}"
+[[ "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || t_die "cannot tell owner/repo from origin ('$repo'); set RAPID_GITHUB_REPO=owner/repo"
+case "$T_OP" in
+  get)
+    out=$(gh issue view "$T_NUM" --repo "$repo" --json number,title,body,state,url) || t_die "gh issue view $T_NUM failed" 1
+    t_ticket "$T_KEY" "" <<<"$out" ;;
+  link)
+    gh issue comment "$T_NUM" --repo "$repo" --body "$(t_link_text)" >/dev/null || t_die "gh issue comment $T_NUM failed" 1
+    t_ok ;;
+  transition)
+    if [ "$T_TO" = done ]; then
+      gh issue close "$T_NUM" --repo "$repo" --comment "$(t_done_text)" >/dev/null || t_die "gh issue close $T_NUM failed" 1
+    else
+      gh issue comment "$T_NUM" --repo "$repo" --body "rapidgit: $T_TO${T_REF:+ ($T_REF)}." >/dev/null || t_die "gh issue comment $T_NUM failed" 1
+    fi
+    t_ok ;;
+esac
