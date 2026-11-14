@@ -967,16 +967,20 @@ _body_thin() {
 # tree again); origin's dev moved under the batch puts dev back; an unreachable
 # origin closes the batch locally, for rapid sync --dev to publish.
 # _close_gate_run FILE ID CMD: run the gate of a close as the leader of a process group of
-# its own and write "<pgid> <id>" to FILE, so stopping the close signals that group and
-# nothing else (a pid read from a list of children can have been reused by the time it is
-# signalled).
+# its own, on record in FILE as "<pgid> <id>", so the gate and everything under it can be
+# stopped as one group and no pid taken from a list is ever signalled. Job control gives
+# the gate its group: a background job of a shell with set -m leads its own. A gate has
+# no input: it reads /dev/null, so one that reads can never wait on a terminal.
 _close_gate_run() {
-  if command -v perl >/dev/null 2>&1; then
-    exec perl -e 'setpgrp(0, 0); if (open(my $f, ">", $ARGV[0])) { print $f "$$ $ARGV[1]\n"; close $f } exec "sh", "-c", $ARGV[2] or exit 127' "$1" "$2" "$3"
-  fi
-  sh -c "$3"
+  local g rc=0
+  set -m
+  sh -c "$3" </dev/null &
+  g=$!
+  set +m
+  printf '%s %s\n' "$g" "$2" > "$1"
+  wait "$g" || rc=$?
+  return "$rc"
 }
-
 # _kill_tree PID ID FILE: stop the close PID whose marker carries ID and the gate it runs.
 # The gate's process group (FILE, written by _close_gate_run) is signalled only while FILE
 # carries ID and the group's leader still descends from PID; then the close itself, only
@@ -1192,7 +1196,9 @@ _batch_close() {
       if [ -z "$cmd" ] || [ "$cmd" = none ]; then printf 'gate=%s\nexit=none (no gate configured)\n' "$g" > "$grec/$g"; continue; fi
       rapid_info "-> batch gate $g on dev $(git rev-parse --short "$tip") ($(git rev-list --first-parent --count "$start..$tip") merges)"
       t0=$(date +%s)
-      { grc=0; (cd "$wt" && export RAPID_TEST_ON_FAIL="${RAPID_TEST_ON_FAIL:-$(rapid_conf test_on_fail "" 2>/dev/null || true)}" && _close_gate_run "$bf.closing.gate" "$cid" "$cmd") 2>&1 || grc=$?
+      # the gate runs in the private work tree: its group goes on record by an absolute path
+      local gatef; case "$bf" in /*) gatef="$bf.closing.gate" ;; *) gatef="$PWD/$bf.closing.gate" ;; esac
+      { grc=0; (cd "$wt" && export RAPID_TEST_ON_FAIL="${RAPID_TEST_ON_FAIL:-$(rapid_conf test_on_fail "" 2>/dev/null || true)}" && _close_gate_run "$gatef" "$cid" "$cmd") 2>&1 || grc=$?
         rm -f "$bf.closing.gate"; echo "$grc" > "$grec/$g.rc"; } | tee "$grec/$g.log" || true
       grc=$(cat "$grec/$g.rc" 2>/dev/null || echo 1)
       _close_rec "$g" "$cmd" "$grc" "$t0" "$grec/$g.log" > "$grec/$g"
