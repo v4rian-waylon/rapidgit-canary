@@ -18,6 +18,7 @@
 | REQ-R-forge-261114014554 | The canary keeps the rulesets and the rapid-check workflow of run 261114014554 on the forge. | P2 | ✅ done | ✅ `forge-261114014554.txt` | internal | `chore/forge-261114014554` |
 | REQ-R-gadget-261114002945 | A gadget branch of run 261114002945 lands through its pull request. | P1 | ✅ done | ✅ `gadget-261114002945.txt` | internal | `feature/gadget-261114002945` |
 | REQ-R-gadget-261114014554 | A gadget branch of run 261114014554 lands through its pull request. | P1 | ✅ done | ✅ `gadget-261114014554.txt` | internal | `feature/gadget-261114014554` |
+| REQ-R-plainc-3-175228 | A probe branch of the canary shows a plain push of a branch. | P1 | ✅ done | ✅ `p3.txt` | internal | `feature/plainc-3-175228` |
 | REQ-R-review-261114002945 | Lands of run 261114002945 go through review on the forge. | P2 | ✅ done | ✅ `review-261114002945.txt` | internal | `chore/review-261114002945` |
 | REQ-R-review-261114014554 | Lands of run 261114014554 go through review on the forge. | P2 | ✅ done | ✅ `review-261114014554.txt` | internal | `chore/review-261114014554` |
 | REQ-R-unreview-261114003642 | Lands of the canary go back to optional review. | P2 | ✅ done | ✅ `unreview-261114003642.txt` | internal | `chore/unreview-261114003642` |
