@@ -50,8 +50,9 @@ rapid_conf() {
 # rapid_has_remote: 0 when an origin remote is configured.
 rapid_has_remote() { git remote get-url origin >/dev/null 2>&1; }
 
-# rapid_branch: the current branch name, empty when detached.
-rapid_branch() { git symbolic-ref --short -q HEAD 2>/dev/null || true; }
+# rapid_branch: the current branch name, empty when detached. A git that cannot
+# answer is not a detached HEAD: its own error stands and the caller stops.
+rapid_branch() { git symbolic-ref --short -q HEAD || [ $? = 1 ]; }
 
 # rapid_tmpdir NAME: a private temp directory honouring TMPDIR.
 rapid_tmpdir() { mktemp -d "${TMPDIR:-/tmp}/rapid-$1.XXXXXX"; }
@@ -84,8 +85,15 @@ rapid_private_wt() {
   [ "$(git -C "$d" rev-parse --absolute-git-dir 2>/dev/null)" != "$(git rev-parse --absolute-git-dir 2>/dev/null)" ] || return 1
   # a heartbeat while rapid runs: the tree's root is touched every RAPID_BUSY_EVERY
   # seconds (default 240), so a sweeper that wipes work trees idle for an hour
-  # (a gate running long under load writes nothing there) sees it in use
-  ( while [ -d "$d" ] && kill -0 $$ 2>/dev/null; do touch "$d" 2>/dev/null || true; sleep "${RAPID_BUSY_EVERY:-240}"; done ) >/dev/null 2>&1 &
+  # (a gate running long under load writes nothing there) sees it in use. It looks
+  # every two seconds whether the tree and rapid are still there, so it ends with
+  # them: a heartbeat asleep for minutes after its tree is gone is a process too
+  # many when hundreds of trees come and go, and a full process table fails forks
+  ( hb=0; he="${RAPID_BUSY_EVERY:-240}"
+    while [ -d "$d" ] && kill -0 $$ 2>/dev/null; do
+      [ "$hb" -gt 0 ] && [ $((hb % he)) -ge 2 ] || touch "$d" 2>/dev/null || true
+      sleep 2; hb=$((hb + 2))
+    done ) >/dev/null 2>&1 &
   printf '%s' "$d"
 }
 

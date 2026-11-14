@@ -966,8 +966,42 @@ _body_thin() {
 # refuses keeps the batch (a second close publishes without testing the same
 # tree again); origin's dev moved under the batch puts dev back; an unreachable
 # origin closes the batch locally, for rapid sync --dev to publish.
-# _kill_tree PID: stop PID and every process under it (a close's gate runs).
-_kill_tree() { local c; for c in $(pgrep -P "$1" 2>/dev/null); do _kill_tree "$c"; done; kill -TERM "$1" 2>/dev/null || true; }
+# _close_gate_run FILE ID CMD: run the gate of a close as the leader of a process group of
+# its own and write "<pgid> <id>" to FILE, so stopping the close signals that group and
+# nothing else (a pid read from a list of children can have been reused by the time it is
+# signalled).
+_close_gate_run() {
+  if command -v perl >/dev/null 2>&1; then
+    exec perl -e 'setpgrp(0, 0); if (open(my $f, ">", $ARGV[0])) { print $f "$$ $ARGV[1]\n"; close $f } exec "sh", "-c", $ARGV[2] or exit 127' "$1" "$2" "$3"
+  fi
+  sh -c "$3"
+}
+
+# _kill_tree PID ID FILE: stop the close PID whose marker carries ID and the gate it runs.
+# The gate's process group (FILE, written by _close_gate_run) is signalled only while FILE
+# carries ID and the group's leader still descends from PID; then the close itself, only
+# while PID is still a rapid land. No pid from a stale list is ever signalled.
+_kill_tree() {
+  local cpid="$1" id="${2:-}" gf="${3:-}" g="" gid="" p i=0
+  # a close stopped right after it wrote its marker has not started its gate yet: wait for the
+  # gate's group to be on record (or for the close to be gone) before signalling
+  while [ "$cpid" != "$$" ] && [ -n "$gf" ] && [ ! -s "$gf" ] && kill -0 "$cpid" 2>/dev/null && [ "$i" -lt 50 ]; do sleep 0.2; i=$((i + 1)); done
+  i=0
+  if [ -n "$gf" ] && [ -s "$gf" ]; then read -r g gid < "$gf" || true; fi
+  if [ -n "$id" ] && [ "$gid" = "$id" ] && [[ "$g" =~ ^[0-9]+$ ]]; then
+    p="$g"
+    while [ -n "$p" ] && [ "$p" != "$cpid" ] && [ "$p" != 1 ] && [ "$i" -lt 8 ]; do
+      p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ' || true); i=$((i + 1))
+    done
+    if [ "$p" = "$cpid" ] && [ "$(ps -o pgid= -p "$g" 2>/dev/null | tr -d ' ' || true)" = "$g" ]; then
+      kill -TERM -- "-$g" 2>/dev/null || true
+    fi
+  fi
+  [ -z "$gf" ] || rm -f "$gf"
+  # (a close ending by itself calls this from its exit trap for its own gate: it is not signalled again)
+  [ "$cpid" != "$$" ] || return 0
+  case "$(ps -o command= -p "$cpid" 2>/dev/null || true)" in *rapid*land*) kill -TERM "$cpid" 2>/dev/null || true ;; esac
+}
 
 # _batch_rollback START TIP: put dev back at START, drop the version tags the batch's
 # merges START..TIP made and the vault branches origin never took; the branches stay.
@@ -1147,7 +1181,8 @@ _batch_close() {
     # the marker of a newer one
     local cid; cid="$$-$(date +%s)-$RANDOM"
     printf '%s %s %s\n' "$$" "$tip" "$cid" > "$bf.closing"
-    trap "_close_marker_drop '$bf.closing' '$cid'; rm -rf '$grec'; git worktree remove --force '$wt' >/dev/null 2>&1 || true" EXIT
+    # a close that ends for any reason takes its own gate with it (the gate runs in its own process group)
+    trap "_kill_tree $$ '$cid' '$bf.closing.gate'; _close_marker_drop '$bf.closing' '$cid'; rm -rf '$grec'; git worktree remove --force '$wt' >/dev/null 2>&1 || true" EXIT
     # one gate: gates_full. The fast gate's lint and scenarios are a subset of the full
     # gate's, so running both tested the same things twice (rapid check --each keeps the
     # fast gate for single commits).
@@ -1157,8 +1192,8 @@ _batch_close() {
       if [ -z "$cmd" ] || [ "$cmd" = none ]; then printf 'gate=%s\nexit=none (no gate configured)\n' "$g" > "$grec/$g"; continue; fi
       rapid_info "-> batch gate $g on dev $(git rev-parse --short "$tip") ($(git rev-list --first-parent --count "$start..$tip") merges)"
       t0=$(date +%s)
-      { grc=0; (cd "$wt" && export RAPID_TEST_ON_FAIL="${RAPID_TEST_ON_FAIL:-$(rapid_conf test_on_fail "" 2>/dev/null || true)}" && sh -c "$cmd") 2>&1 || grc=$?
-        echo "$grc" > "$grec/$g.rc"; } | tee "$grec/$g.log" || true
+      { grc=0; (cd "$wt" && export RAPID_TEST_ON_FAIL="${RAPID_TEST_ON_FAIL:-$(rapid_conf test_on_fail "" 2>/dev/null || true)}" && _close_gate_run "$bf.closing.gate" "$cid" "$cmd") 2>&1 || grc=$?
+        rm -f "$bf.closing.gate"; echo "$grc" > "$grec/$g.rc"; } | tee "$grec/$g.log" || true
       grc=$(cat "$grec/$g.rc" 2>/dev/null || echo 1)
       _close_rec "$g" "$cmd" "$grc" "$t0" "$grec/$g.log" > "$grec/$g"
       [ "$grc" = 0 ] || { rc=1; printf '%s %s fail\n' "$g" "$tip" >> "$bf.gates"; break; }
@@ -1255,12 +1290,12 @@ _batch_prune() {
 # _batch_halt: rapid land --halt: stop the close under test and keep the batch as it is
 # (dev, its tags and the branches stay; the next rapid land closes it).
 _batch_halt() {
-  local root bf cpid tip; root=$(rapid_root); cd "$root"
+  local root bf cpid tip cid; root=$(rapid_root); cd "$root"
   bf="$(git rev-parse --git-common-dir)/rapid/batch"
   [ -s "$bf" ] || rapid_die "no batch is open; nothing to halt"
   [ -s "$bf.closing" ] || rapid_die "no close of this batch is under test; nothing to halt"
-  read -r cpid tip _ < "$bf.closing" || true; rm -f "$bf.closing"
-  if [ -n "$cpid" ] && kill -0 "$cpid" 2>/dev/null; then _kill_tree "$cpid"; fi
+  read -r cpid tip cid < "$bf.closing" || true; rm -f "$bf.closing"
+  if [ -n "$cpid" ] && kill -0 "$cpid" 2>/dev/null; then _kill_tree "$cpid" "${cid:-}" "$bf.closing.gate"; fi
   rapid_info "halted the close testing dev $(git rev-parse --short "${tip:-dev}" 2>/dev/null || true); the batch stays open, nothing was pushed"
 }
 # _land_rebase BRANCH SLUG: rebase the checked-out stale BRANCH onto dev as rapid
@@ -1571,9 +1606,9 @@ $(sed 's/^/  - /' <<<"$out")"
     $dry || [ -s "$bf" ] || git rev-parse dev > "$bf"
     if ! $dry && [ -s "$bf.closing" ]; then
       # no point finishing a test another one replaces: stop the close, land, test the new final tree
-      local cpid; read -r cpid _ < "$bf.closing"; rm -f "$bf.closing"
+      local cpid ctip ccid; read -r cpid ctip ccid < "$bf.closing" || true; rm -f "$bf.closing"
       if [ -n "$cpid" ] && kill -0 "$cpid" 2>/dev/null; then
-        _kill_tree "$cpid"
+        _kill_tree "$cpid" "${ccid:-}" "$bf.closing.gate"
         rapid_info "-> stopped the close testing $(git rev-parse --short dev): the batch has a new final tree"
       fi
     fi
