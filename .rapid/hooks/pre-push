@@ -203,12 +203,17 @@ while read -r lref lsha rref rsha; do
         ra=$(git ls-remote "$remote" "$an" 2>/dev/null | cut -f1 || true)
         if [ -z "$ra" ]; then
           # queued: it goes up, with the others, in one push once this push is over (a push
-          # from inside a push makes a forge fail the outer one now and then)
+          # from inside a push makes a forge fail the outer one now and then); one the forge
+          # still refuses is queued again by the next push of the branch, and rapid's own
+          # pushes carry it (rapid sync --push, the close of a batch)
           aq="$(cd "$(git rev-parse --git-common-dir)" && pwd -P)/rapid/push-after.$PPID"; mkdir -p "${aq%/*}"
           if [ ! -s "$aq" ]; then
+            # what the queued push answers is kept in rapid's own log in the git dir, never shown
             ( while kill -0 "$PPID" 2>/dev/null; do sleep 0.2; done
-              # shellcheck disable=SC2046
-              git push -q "$remote" $(cat "$aq" 2>/dev/null); rm -f "$aq" ) </dev/null >/dev/null 2>&1 &
+              { printf '%s push-after %s: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$remote" "$(tr '\n' ' ' < "$aq")"
+                # shellcheck disable=SC2046
+                git push "$remote" $(cat "$aq" 2>/dev/null) && echo "push-after: done" || echo "push-after: failed ($?)"; } >> "${aq%/*}/log" 2>&1
+              rm -f "$aq" ) </dev/null >/dev/null 2>&1 &
           fi
           printf '%s:%s\n' "$an" "$an" >> "$aq"
         elif [ "$ra" != "$(git rev-parse "$an")" ]; then

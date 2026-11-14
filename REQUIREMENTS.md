@@ -23,6 +23,7 @@
 | REQ-R-unreview-261114003642 | Lands of the canary go back to optional review. | P2 | ✅ done | ✅ `unreview-261114003642.txt` | internal | `chore/unreview-261114003642` |
 | REQ-R-unreview-261114014554 | Run 261114014554 puts lands back to optional review. | P2 | ✅ done | ✅ `unreview-261114014554.txt` | internal | `chore/unreview-261114014554` |
 | REQ-R-upgrade-261114014554 | The canary takes the framework under test for run 261114014554. | P2 | ✅ done | ✅ `.rapid/rapid` | internal | `chore/upgrade-261114014554` |
+| REQ-R-upgrade-261114020513 | The canary takes the framework under test for run 261114020513. | P2 | ✅ done | ✅ `.rapid/rapid` | internal | `chore/upgrade-261114020513` |
 | REQ-R-upgrade-policy-261114014554 | Run 261114014554 lets a framework upgrade land as one commit on the canary. | P2 | ✅ done | ✅ `upgrade-policy-261114014554.txt` | internal | `chore/upgrade-policy-261114014554` |
 | REQ-R-widget-261114002804 | A widget branch of run 261114002804 runs the forge jobs green. | P1 | ✅ done | ✅ `widget-261114002804.txt` | internal | `feature/widget-261114002804` |
 | REQ-R-widget-261114002945 | A widget branch of run 261114002945 runs the forge jobs green. | P1 | ✅ done | ✅ `widget-261114002945.txt` | internal | `feature/widget-261114002945` |
