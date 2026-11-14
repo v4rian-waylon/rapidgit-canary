@@ -1725,7 +1725,9 @@ $(sed 's/^/  - /' <<<"$out")"
   fi
   [ -z "$vobj" ] || git update-ref "$vref" "$vobj" "$RAPID_ZERO" 2>/dev/null || true
   _move_branch dev "$merge" "$dev_tip"
-  if ! git switch -q dev 2>/dev/null; then git switch -q --detach "$merge"; fi
+  # why dev could not be checked out, when it could not, is kept in rapid's own log in the git dir
+  mkdir -p "$(git rev-parse --git-common-dir)/rapid"
+  if ! git switch -q dev 2>>"$(git rev-parse --git-common-dir)/rapid/log"; then git switch -q --detach "$merge"; fi
   # a batch keeps the branch until its close: a failing close leaves every branch as it was
   if $batch; then printf '%s\n' "$branch" >> "$(git rev-parse --git-common-dir)/rapid/batch.branches"; else git branch -q -D "$branch"; fi
   rapid_info "landed $kind/$slug as $next ($(git rev-parse --short "$merge")); gates $gates; $where"
