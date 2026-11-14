@@ -29,6 +29,7 @@
 | REQ-R-unreview-261114003642 | Lands of the canary go back to optional review. | P2 | ✅ done | ✅ `unreview-261114003642.txt` | internal | `chore/unreview-261114003642` |
 | REQ-R-unreview-261114014554 | Run 261114014554 puts lands back to optional review. | P2 | ✅ done | ✅ `unreview-261114014554.txt` | internal | `chore/unreview-261114014554` |
 | REQ-R-unreview-261114020513 | Run 261114020513 puts lands back to optional review. | P2 | ✅ done | ✅ `unreview-261114020513.txt` | internal | `chore/unreview-261114020513` |
+| REQ-R-unreview-261114055524 | Run 261114055524 puts lands back to optional review. | P2 | ✅ done | ✅ `unreview-261114055524.txt` | internal | `chore/unreview-261114055524` |
 | REQ-R-upgrade-261114014554 | The canary takes the framework under test for run 261114014554. | P2 | ✅ done | ✅ `.rapid/rapid` | internal | `chore/upgrade-261114014554` |
 | REQ-R-upgrade-261114020513 | The canary takes the framework under test for run 261114020513. | P2 | ✅ done | ✅ `.rapid/rapid` | internal | `chore/upgrade-261114020513` |
 | REQ-R-upgrade-261114055524 | The canary takes the framework under test for run 261114055524. | P2 | ✅ done | ✅ `.rapid/rapid` | internal | `chore/upgrade-261114055524` |
