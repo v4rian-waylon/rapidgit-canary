@@ -18,6 +18,7 @@
 | REQ-R-gadget-261114002945 | A gadget branch of run 261114002945 lands through its pull request. | P1 | ✅ done | ✅ `gadget-261114002945.txt` | internal | `feature/gadget-261114002945` |
 | REQ-R-review-261114002945 | Lands of run 261114002945 go through review on the forge. | P2 | ✅ done | ✅ `review-261114002945.txt` | internal | `chore/review-261114002945` |
 | REQ-R-unreview-261114003642 | Lands of the canary go back to optional review. | P2 | ✅ done | ✅ `unreview-261114003642.txt` | internal | `chore/unreview-261114003642` |
+| REQ-R-upgrade-policy-261114014554 | Run 261114014554 lets a framework upgrade land as one commit on the canary. | P2 | ✅ done | ✅ `upgrade-policy-261114014554.txt` | internal | `chore/upgrade-policy-261114014554` |
 | REQ-R-widget-261114002804 | A widget branch of run 261114002804 runs the forge jobs green. | P1 | ✅ done | ✅ `widget-261114002804.txt` | internal | `feature/widget-261114002804` |
 | REQ-R-widget-261114002945 | A widget branch of run 261114002945 runs the forge jobs green. | P1 | ✅ done | ✅ `widget-261114002945.txt` | internal | `feature/widget-261114002945` |
 
