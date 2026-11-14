@@ -1765,7 +1765,7 @@ _land_pr_gate() {
   if [ "$old" != "$m" ]; then
     [ -z "$old" ] || lease="--force-with-lease=refs/heads/$branch:$old"
     # shellcheck disable=SC2086
-    git push -q $lease origin "$m:refs/heads/$branch" || rapid_die "publishing $(git rev-parse --short "$m") as $branch's head failed (origin's branch moved?)"
+    git push -q --atomic $lease origin "$m:refs/heads/$branch" $(_anchor_refspecs "$branch") || rapid_die "publishing $(git rev-parse --short "$m") as $branch's head failed (origin's branch moved?)"
   fi
   bodyf=$(mktemp "${TMPDIR:-/tmp}/rapid-pr.XXXXXX"); sed '1,2d' "$msg" > "$bodyf"
   n=$(gh pr list --repo "$repo" --head "$branch" --base dev --state open --json number --jq '.[0].number // empty' 2>/dev/null || true)
@@ -1835,6 +1835,17 @@ _pr_approvals() {
 # ---------------------------------------------------------------- sync
 _rename_hint() { printf "rename this branch with 'rapid branch --rename <new-slug>', then rapid sync"; }
 
+# _anchor_refspecs BRANCH: the refspecs of BRANCH's safety anchor and number reservation
+# that origin lacks, so a push of the branch carries them itself.
+_anchor_refspecs() {
+  local an have
+  have=$(git ls-remote origin 'refs/heads/safety/*' 2>/dev/null | cut -f2) || have=""
+  for an in $(rapid_anchor_refs "refs/heads/$1"); do
+    git rev-parse -q --verify "$an" >/dev/null || continue
+    grep -Fx -- "$an" <<<"$have" >/dev/null || printf '%s:%s\n' "$an" "$an"
+  done
+}
+
 # rapid sync: bring the current branch onto dev's tip. The branch tip is kept
 # first under refs/rapid/preflight/<slug>/<stamp>, the branch is rebased onto dev
 # (dev first fast-forwarded from origin). sync never pushes: with --push the
@@ -1869,7 +1880,10 @@ cmd_sync() {
     rapid_has_remote || rapid_die "sync --push: no origin to push to"
     old=$(git ls-remote origin "refs/heads/$branch" | cut -f1) || rapid_die "sync --push: origin is unreachable; the branch stays local"
     if [ "$old" != "$(git rev-parse HEAD)" ]; then
-      git push -q --force-with-lease="refs/heads/$branch:$old" origin "HEAD:refs/heads/$branch" \
+      # the branch goes with its safety anchor and its number in one push, so the pre-push
+      # hook has no anchor left to push while this push is open
+      # shellcheck disable=SC2046
+      git push -q --atomic --force-with-lease="refs/heads/$branch:$old" origin "HEAD:refs/heads/$branch" $(_anchor_refspecs "$branch") \
         || rapid_die "origin refused $branch (its reason is above); if origin's copy moved, fetch and compare before pushing"
       if [ -n "$old" ]; then old=$(git rev-parse --short "$old" 2>/dev/null || printf '%s' "${old:0:7}"); else old="<none>"; fi
       rapid_info "pushed $branch (lease on $old)"
