@@ -17,8 +17,8 @@ agent follows the steps literally; every refusal names the next command.
    person, never the runner, as the first admin in `.rapid/admins`
    (setup-owner). Without the flag a human runner becomes the first admin,
    and an agent runner writes none and says so.
-2. Set the gates in `.rapid/conf`, on a first branch, as a `[MODE]` commit of
-   the admin `rapid setup` wrote into `.rapid/admins`. Who may commit and push
+2. A later change to the gates is a `[MODE]` commit by an admin, on a branch
+   of its own. Who may commit and push
    is the repository's own access; rapid keeps no list of authors.
 3. Agents: `rapid setup --agent` installs the guard for Claude Code: it
    denies an agent a push to main and a release.
@@ -57,11 +57,12 @@ agent follows the steps literally; every refusal names the next command.
 3. `rapid check` (fast gate on the work tree) as often as you like;
    `rapid check --each` (the commit audit, then the fast gate on every commit)
    or `rapid check --audit` (the audit alone, instant) before landing. Pushing
-   the branch to share it runs the same per-commit checks first, and a commit
+   the branch to share it has pre-push judge the message and the files of
+   every commit, with no gate, and a commit
    past `max_commits` is refused before it is written: land the branch and
    start the next.
 4. `rapid land --batch`: policy, then every static check at once (size, the message
-   and author of every commit, the commit audit, the requirement and its
+   of every commit, the commit audit, the requirement and its
    proof), each refusal listed before anything is written; then one merge and
    one tag, local, into the open batch, with no gate and no push. Its receipt
    says `Gates: deferred to the close of batch <id>`. `rapid land` without `--batch`
@@ -158,8 +159,9 @@ sync`, then land again.
   branches not landed yet (sync and land each again); nothing is lost.
 - During a re-land never run `rapid land` by hand: it is refused, because the
   plan lands each branch itself. Resolve, then `rapid sync --dev --continue`.
-- The link drops during a land's push: nothing changes locally (the tag is
-  undone); rerun `rapid land`.
+- The link drops during the close's push: dev, the tags and the batch stay;
+  `rapid land` again publishes them without a second test. A `land --pr` push
+  that drops undoes its tag.
 
 ## Prove the forge (framework source)
 
@@ -263,7 +265,7 @@ checks): run `rapid release` again once it is mergeable.
 - `rapid bisect <good> <bad> -- <test command>`: first the landed branch, then the
   commit inside it; `Red:` commits are skipped, exit 125 skips a commit the
   command cannot test, and a skipped commit that may have broken it is named.
-- `git blame` names the author and, for agents, the model of every line;
+- `git blame` names the author of every line;
   the merge's trailers name the requirement and the gates.
 - Undo a landed branch: `rapid branch fix revert-<slug>`, `git revert --no-commit -m 1
   <merge>`, restore `requirements/<slug>.md` (it is never deleted), commit with
@@ -298,8 +300,8 @@ checks): run `rapid release` again once it is mergeable.
   last merge this clone verified, unless the checkpoint no longer holds;
   `--all` walks every merge; the merges are checked at once, one worker per
   core, findings in history order), and every exception the
-  rules let land (`Bulk:`, `Untested:`, `Gate-Change:`, `Docs: none`, no
-  gate) counted with its versions;
+  rules let land (`Untested:`, `Docs: none`, a batch close, no gate) counted
+  with its versions;
   `rapid doctor --prove [SINCE]`: every merge's gates rerun on its own tree,
   and every release's gate on the released tree, each merge's stored gate log
   printed beside the rerun.
@@ -310,8 +312,8 @@ checks): run `rapid release` again once it is mergeable.
 - `rapid land --dry-run` and `rapid release --dry-run` change nothing, local dev
   included: when origin's dev is ahead they stop and say to run `rapid sync
   --dev` first.
-- A clone that never ran `rapid setup`: `rapid branch`, `land`, `sync` and
-  `release` refuse and name it; `rapid status` says what is missing; `check`,
+- A clone that never ran `rapid setup`: `rapid branch`, `commit`, `land`, `sync`
+  and `release` refuse and name it; `rapid status` says what is missing; `check`,
   `bisect` and `doctor` work without it (the forge's runner has no hooks).
 - `rapid check --judge`: an advisory Claude review of the branch's commits
   (`--strict` fails on a finding); skipped without the claude CLI.

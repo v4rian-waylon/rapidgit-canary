@@ -22,7 +22,7 @@ t_args "$@"
 t_need curl
 url="${RAPID_JIRA_URL:-}"; url="${url%/}"
 [ -n "$url" ] || t_die "no JIRA site: set RAPID_JIRA_URL in the environment (https://<team>.atlassian.net)"
-[[ "$url" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._/-]*)?$ ]] || t_die "RAPID_JIRA_URL must be an https URL, got '$url'"
+[[ "$url" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._/-]*)?$ ]] || t_die "RAPID_JIRA_URL must be an https URL, got '$(sed -E 's#^([a-z+]+://)[^/@]*@#\1#' <<<"$url")'"
 [ -n "${RAPID_JIRA_TOKEN:-}" ] || t_die "no JIRA credential: set RAPID_JIRA_TOKEN in the environment"
 if [ -n "${RAPID_JIRA_USER:-}" ]; then
   auth="Basic $(printf '%s:%s' "$RAPID_JIRA_USER" "$RAPID_JIRA_TOKEN" | base64 | tr -d '\n')"

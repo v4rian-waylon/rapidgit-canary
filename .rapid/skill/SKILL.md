@@ -25,7 +25,7 @@ and you never release or change a policy file (`.rapid/conf`, `.rapid/admins`).
    The branch is `pool/v<series>/n<N>.<kind>.<slug>`; never pick or edit a number by hand.
 2. Commit one concern at a time; a change and its test in one commit. Subject
    `[NEW|FIX|REFACTOR|DOCS|TEST|REVERT|HOTFIX|MODE] Capitalised summary`, 12 to 72
-   chars, no final period, blank second line, no em dash; a change commit
+   chars, no final period, blank second line, no em or en dash; a change commit
    has a body line of five words or more saying what and why.
    A subject that needs `and`,
    `with`, `plus`, `or`, `then`, `beside`, `+` or `,` is two commits; a `[FIX]` body has a
@@ -52,7 +52,7 @@ and you never release or change a policy file (`.rapid/conf`, `.rapid/admins`).
 7. Changelog: `rapid changelog`, never a CHANGELOG.md. To find a regression: `rapid bisect <good> <bad> -- <test>`. To undo a branch:
    a revert branch with `Fixes: <merge>` (FLOWS.md).
 8. Never delete or move a branch, dev, main, a vault ref or a safety anchor
-   (the branches `safety/...` and `vault/...`, a branch's fork point and landed tip, kept forever); an
+   (the branches `safety/...` and `vault/...`, a branch's fork point and landed tip, kept forever); a
    branch not landed yet stays a branch. Never stage a secret, key, build
    output, `node_modules/`, `.env`, `*.zip` or `*.bak`.
 9. Every refusal names the fix. Run it; never work around a refusal with
@@ -68,8 +68,8 @@ and you never release or change a policy file (`.rapid/conf`, `.rapid/admins`).
   standing grant; `--pr` only when asked or required.
 - A retry of a fix not landed yet stays on its branch; a fix to a landed branch is a
   new `fix` branch with `Fixes: <merge>`. dev is never rewritten.
-- Push your branch after each commit when origin is reachable; nothing else
-  by hand. No empty commit. Never invent a ticket id.
+- Share your branch with `rapid sync --push` when origin is reachable and no
+  batch is open (a push is refused while one is); nothing else by hand. No empty commit. Never invent a ticket id.
 - A commit you did not author is not yours: never
   amend, rebase, filter or replay it unless the owner names it; in doubt,
   it is theirs.

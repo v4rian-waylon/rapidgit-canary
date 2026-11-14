@@ -121,7 +121,7 @@ while read -r lref lsha rref rsha; do
           # a merge this clone did not gate (no proof note carrying this clone's id) has its fast gate rerun here
           note=$(git notes --ref=rapid-proof show "$c" 2>/dev/null || true)
           if [[ "$note" != *"tree=$(git rev-parse "$c^{tree}") clone=$(rapid_clone_id)"* ]]; then
-            out=$(rapid_prove_merge "$c" fast)
+            out=$(rapid_prove_merge "$c" fast "$lsha")
             [ -z "$out" ] || { printf '%s\n' "$out" | sed 's/^/  /' >&2; fail "merge $(git rev-parse --short "$c") fails its fast gate; its Gates: receipt does not hold"; }
           fi
         done

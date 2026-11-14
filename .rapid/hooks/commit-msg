@@ -37,6 +37,14 @@ if [ -n "$hit" ]; then
   pf=$(rapid_policy_flip_problem "$(grep -v '^#' "$1" | sed -n 1p)" "$files" "$ae" "$an" "$ce")
   [ -z "$pf" ] || idp="${idp:+$idp
 }$pf"
+  # under signed=required an admin signs the flip: the key this commit will carry signs a probe
+  # commit (kept by no ref), and its verified signer is judged like the commit's own will be
+  if [ "$(rapid_conf signed optional)" = required ] && git rev-parse -q --verify HEAD >/dev/null; then
+    probe=$(git commit-tree -S "HEAD^{tree}" -p HEAD -m "signing probe of a policy flip" </dev/null 2>/dev/null || true)
+    pf=$(rapid_flip_signer_problem "$probe")
+    [ -z "$pf" ] || idp="${idp:+$idp
+}$pf"
+  fi
 fi
 if [ -n "$out" ] || [ -n "$idp" ]; then
   echo "X commit-msg: the commit breaks the rules:" >&2

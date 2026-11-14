@@ -2,10 +2,9 @@
 # rapid agent hook tool: git-preflight. Two independent working-tree backups BEFORE a destructive
 # op, without touching the current branch or index. 1) preflight-bak-YYYY-MM-DD/NN ref built from a
 # temp index of the full working tree (tracked + untracked, secrets/build/node_modules excluded),
-# pushed to origin. 2) bak zip of the working tree into RAPID_BAKS_DIR (+ optional mirror).
+# kept in this clone only: a preflight never reaches a remote. 2) bak zip of the working tree into RAPID_BAKS_DIR (+ optional mirror).
 # Reuse: when a preflight younger than PREFLIGHT_MAX_AGE_H (12) exists for the same HEAD and the
-# same working-tree snapshot (tree hash), with its zip still on disk (and its ref on origin when
-# the repo has one), nothing new is written.
+# same working-tree snapshot (tree hash), with its zip still on disk, nothing new is written.
 # Retention: only the newest PREFLIGHT_KEEP (5) <repo>-bak-*.zip per repo stay in the bak dir and
 # the mirror; older ones are moved to the Trash (RAPID_TRASH_DIR when set, else /usr/bin/trash,
 # else $HOME/.Trash), never deleted.
@@ -53,7 +52,7 @@ cp "$(git rev-parse --git-path index)" "$tmpidx" 2>/dev/null || rm -f "$tmpidx"
 # Stage by explicit path list, never `git add -A`: the exact set of tracked-modified/deleted plus
 # untracked-not-ignored paths, minus the excludes below, fed to update-index. A path git cannot read
 # fails the preflight instead of silently dropping out.
-# Secrets match at ANY depth (the preflight ref is pushed to origin): .auth/ keys/ .frac/ dirs, .env,
+# Secrets match at ANY depth (the preflight ref is a commit like any other): .auth/ keys/ .frac/ dirs, .env,
 # .env.*, *.env, *.p8 *.p12 *.pem *.cer *.provisionprofile *.mobileprovision, .DS_Store, and the credential
 # files SECRET_GLOBS lists (ssh, cloud, kube, database and token files). They are also
 # dropped from the snapshot when tracked. Non-secret zip excludes (node_modules at any depth, top-level
@@ -74,12 +73,11 @@ for gl in "${BULK_GLOBS[@]}"; do EXCL_PS+=( ":(exclude,glob)$gl" ); done
 git ls-files -z --modified --others --exclude-standard -- . "${EXCL_PS[@]}" \
   | perl -0 -pe 's{/\0}{\0}g' \
   | GIT_INDEX_FILE="$tmpidx" git update-index -z --add --remove --stdin
-# tracked secrets never ride along to origin either
+# tracked secrets never ride along into the backup commit either
 GIT_INDEX_FILE="$tmpidx" git ls-files -z --cached -- "${SECRET_PS[@]}" \
   | GIT_INDEX_FILE="$tmpidx" git update-index -z --force-remove --stdin
 tree=$(GIT_INDEX_FILE="$tmpidx" git write-tree)
 parent=$(git rev-parse --verify -q HEAD || true)
-has_origin=0; git remote get-url origin >/dev/null 2>&1 && has_origin=1
 
 # ---- reuse a fresh preflight of the same HEAD + same working tree ----
 now=$(date +%s); limit=$(( MAXH * 3600 ))
@@ -92,9 +90,6 @@ while read -r ts ref; do
   [ -n "$oldzip" ] && [ -f "$oldzip" ] || continue
   [ $(( now - $(mtime "$oldzip") )) -le "$limit" ] || continue
   br=${ref#refs/heads/}
-  if [ "$has_origin" = 1 ]; then
-    [ "$(git rev-parse -q --verify "refs/remotes/origin/$br" 2>/dev/null || true)" = "$(git rev-parse "$ref")" ] || continue
-  fi
   retain "$BAKS"; retain "$MIRROR"
   echo "preflight: reused $br ($(git rev-parse --short "$ref"), same HEAD and working tree, $(( (now - ts) / 60 )) min old); zip $oldzip"
   exit 0
@@ -103,16 +98,13 @@ $(git for-each-ref --sort=-committerdate --format='%(committerdate:unix) %(refna
 EOF
 
 # next free sequence number for today
-n=1; while git show-ref --verify --quiet "refs/heads/preflight-bak-$day/$(printf %02d $n)" || git show-ref --verify --quiet "refs/remotes/origin/preflight-bak-$day/$(printf %02d $n)"; do n=$((n+1)); done
+n=1; while git show-ref --verify --quiet "refs/heads/preflight-bak-$day/$(printf %02d $n)"; do n=$((n+1)); done
 BR="preflight-bak-$day/$(printf %02d $n)"
 mkdir -p "$BAKS"
 zipf="$BAKS/$name-bak-$TS.zip"
 commit=$(printf 'preflight backup before %s\n\nFull working tree (tracked + untracked, secrets and build outputs excluded) as of %s.\n\nZip: %s\n' "$reason" "$TS" "$zipf" | git commit-tree "$tree" ${parent:+-p "$parent"})
 git update-ref "refs/heads/$BR" "$commit"
-pushed="local-only (no origin)"
-if [ "$has_origin" = 1 ]; then
-  git push -q --no-verify origin "refs/heads/$BR:refs/heads/$BR" && pushed="pushed to origin" || pushed="PUSH FAILED (local-only, still at risk)"
-fi
+# the backup stays in this clone: only dev, main, pool, safety and vault branches go to a remote
 # content-level zip, independent of git (zip wildcards cross '/', so */x/* matches at any depth)
 # The zip excludes are derived from SECRET_GLOBS (re-audit L2: a second hand-kept list drifted),
 # rewritten as zip wildcards ('**/x' -> '*/x', '**/x/**' -> '*/x/*'; zip's * crosses '/').
@@ -124,4 +116,4 @@ done
 ( cd "$repo/.." && zip -rq "$zipf" "$name" -x "${ZIP_X[@]}" )
 [ -n "$MIRROR" ] && [ -d "$MIRROR" ] && cp -p "$zipf" "$MIRROR/" 2>/dev/null || true
 retain "$BAKS"; retain "$MIRROR"
-echo "preflight: $BR ($commit, $pushed); zip $zipf ($(du -h "$zipf" | cut -f1))"
+echo "preflight: $BR ($commit, local-only); zip $zipf ($(du -h "$zipf" | cut -f1))"

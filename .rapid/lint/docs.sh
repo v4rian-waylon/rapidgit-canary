@@ -32,7 +32,7 @@ N=.rapid
 [ -f "$N/rapid" ] || { echo "X docs: no $N/rapid here; run from the tree root" >&2; exit 1; }
 rc=0
 bad() { echo "X docs: $*"; rc=1; }
-docs=("$N/README.md" "$N/RULES.md" "$N/FLOWS.md" "$N/DESIGN.md" "$N/skill/SKILL.md")
+docs=("$N/README.md" "$N/RULES.md" "$N/FLOWS.md" "$N/DESIGN.md" "$N/skill/SKILL.md" "$N/MANUAL.md" "$N/skill/AGENT.md")
 [ -f "$N/FRAMEWORK" ] && [ -f README.md ] && docs+=(README.md)
 for f in "${docs[@]}"; do [ -f "$f" ] || bad "$f is missing"; done
 usage=$(awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$N/rapid")

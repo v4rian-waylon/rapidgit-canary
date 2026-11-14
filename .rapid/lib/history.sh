@@ -41,6 +41,11 @@ rapid_check_merge() {
   if [ "$n" != 3 ]; then echo "I1 $m is not a two-parent merge"; return 0; fi
   p1=$(git rev-parse "$m^1"); p2=$(git rev-parse "$m^2")
   if [ -n "$(git rev-list --merges "$p1..$p2")" ]; then echo "I1 $m branch range holds a merge commit"; fi
+  # the merge adds nothing of its own: its tree is its branch's tree when the branch holds the first
+  # parent (the shape rapid land writes after it rebases), else the tree merging the two parents gives
+  if git merge-base --is-ancestor "$p1" "$p2" 2>/dev/null; then want=$(git rev-parse "$p2^{tree}")
+  else want=$(git merge-tree --write-tree "$p1" "$p2" 2>/dev/null | sed -n 1p) || want=""; fi
+  [ "$(git rev-parse "$m^{tree}")" = "$want" ] || echo "I1 $m tree is not the tree merging its branch gives: the merge commit changes files itself"
   vs=$(git tag --points-at "$m" -l 'v*' | grep -cE '^v[0-9]{4}\.[0-9]+\.[0-9]+$' || true)
   v=$(rapid_version_of "$m")
   if [ "$vs" != 1 ]; then echo "I2 $m carries $vs version tags (want 1)"; fi
@@ -454,18 +459,31 @@ rapid_reland_pending() {
   done
 }
 
-# rapid_prove_merge M [GATES]: re-run the gates (default "fast full") the conf at M's first parent names on
+# rapid_prove_merge M [GATES] [TIP]: re-run the gates (default "fast full") the conf at M's first parent names on
 # M's own tree and compare with M's Gates: receipt. Prints "P1 <m> <why>" per
-# gate that fails (a receipt that claims a pass it cannot show is a lie).
+# gate that fails (a receipt that claims a pass it cannot show is a lie). TIP (default
+# dev) is the line M sits on: a deferred receipt is read with the last merge of its batch.
 rapid_prove_merge() {
-  local m="$1" gates="${2:-fast full}" p1 wt g r receipt claimed out=""
+  local m="$1" gates="${2:-fast full}" tip="${3:-dev}" p1 wt g r receipt claimed out="" last id c bf
   p1=$(git rev-parse "$m^1"); receipt=$(rapid_trailer "$m" Gates)
   # a batch merge is proven by what its close ran: gates_each on its own tree, and on the
-  # last merge of the batch (the one carrying the close record) the full gate as well
+  # last merge of the batch the full gate as well. The conf stays the first parent's, and the
+  # receipt holds only when that last merge carries the close record in the gate log
+  # (a batch still open in this clone has no close yet: its merges run gates_each alone)
   if [[ "$receipt" == "deferred to the close of batch "* ]]; then
-    gates=each
-    ! grep -q '^close of batch [0-9a-f]*: gates on the final tree ' <<<"$(git notes --ref=gates show "$m" 2>/dev/null || true)" || gates="each full"
-    p1="$m"
+    gates=each; last="$m"; id="${receipt##* }"
+    for c in $(git rev-list --first-parent --reverse "$m..$tip" 2>/dev/null || true); do
+      [ "$(rapid_trailer "$c" Gates)" = "$receipt" ] || break
+      last="$c"
+    done
+    bf="$(git rev-parse --git-common-dir)/rapid/batch"
+    if [ ! -s "$bf" ] || [ "$(git rev-parse -q --verify "$id^{commit}" 2>/dev/null || true)" != "$(cat "$bf")" ]; then
+      if ! grep "^close of batch [0-9a-f]*: gates on the final tree $(git rev-parse "$last^{tree}")\$" <<<"$(git notes --ref=gates show "$last" 2>/dev/null || true)" >/dev/null; then
+        echo "P1 $m defers its gates to the close of batch $id, and the last merge of that batch ($(git rev-parse --short "$last")) carries no close record in the gate log: no gate is shown to have run"
+        return 0
+      fi
+      [ "$m" != "$last" ] || gates="each full"
+    fi
   fi
   wt=$(mktemp -d "${TMPDIR:-/tmp}/rapid-prove.XXXXXX")
   git worktree add -q --detach "$wt" "$m" >/dev/null 2>&1 || { echo "P1 $m cannot check out its tree"; return 0; }
@@ -529,7 +547,7 @@ rapid_prove_range() {
   case "$since" in ""|0000000000000000000000000000000000000000) range="$dev" ;; *) range="$since..$dev" ;; esac
   for m in $(git rev-list --first-parent --reverse $range); do
     [ "$m" = "$root" ] && continue
-    rapid_prove_merge "$m"
+    rapid_prove_merge "$m" "fast full" "$dev"
     rapid_prove_release "$m"
   done
 }

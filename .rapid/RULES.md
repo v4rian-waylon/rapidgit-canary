@@ -39,11 +39,8 @@ workflow file, so review, not the status, is what a hostile change meets.
 | Branch | Moves by | Never |
 |---|---|---|
 | `dev` | `rapid land` only: one merge per branch | a direct commit, a rewrite, a deletion |
-| `main` | `rapid release` by the owner only: fast-forward to a released dev commit | a commit dev lacks, a rewrite, a deletion, a release by anyone but the owner |
 | `pool/v<series>/<number>.<kind>.<slug>` | your commits; `rapid sync` rebases it onto dev | landing without `rapid land` |
-| `main` | `rapid release` by the owner only: a `--no-ff` release merge `[MERGE] dev into main: <v>` of a released dev commit, so `git log --first-parent main` lists the releases | a tree dev lacks, a fast-forward to dev, a rewrite, a deletion, a release by anyone but the owner |
 | `main` | `rapid release` by the owner only: a `--no-ff` release merge `[MERGE] dev into main: <v>` of a released dev commit, so `git log --first-parent main` lists the releases; written here and pushed, or, when the forge's main ruleset requires a pull request, merged through the dev to main PR by the forge's API and checked before the tag | a tree dev lacks, a fast-forward to dev, a rewrite, a deletion, a release by anyone but the owner |
-| `pool/v<series>/<kind>.<slug>` | your commits; `rapid sync` rebases it onto dev | landing without `rapid land` |
 | `safety/v<series>/<number>.<kind>.<slug>` | written once by `rapid branch`: an anchor commit on the fork point | deletion, a move, a hand-written anchor: pre-push, the agent guard and the `rapid-safety-lockdown` ruleset refuse them |
 | `vault/v<series>/<number>.<kind>.<slug>` | written once by `rapid land` at the landed branch tip | deletion, a move, a hand-written vault branch: pre-push, the agent guard and the `rapid-vault-readonly` ruleset refuse them |
 
@@ -94,9 +91,9 @@ rapid moves it, and on a forge only a repository admin removes a branch.
   commits live on as the merge's second parent, its fork point in its anchor,
   its tip in its vault branch); with `--batch` the close is deferred, and
   without it the land closes the batch: it gates the batch's final tree
-  once (`gates_full`) and pushes it all in one atomic push. A `--pr` land,
-  apart from its atomic push, tries to delete the branch on origin.
-  The `rapid-branch-deletions` ruleset lets only admins do that: for anyone
+  once (`gates_full`) and pushes it all in one atomic push. A passed close,
+  like a `--pr` land after its atomic push, tries to delete each landed branch
+  on origin. The `rapid-branch-deletions` ruleset lets only admins do that: for anyone
   else the branch stays on origin, landed. A branch never landed stays a branch:
   `rapid status` and `rapid doctor` list it as not landed yet.
 - `rapid status` and `rapid doctor` list landed branches still on origin, and an
@@ -110,7 +107,7 @@ rapid moves it, and on a forge only a repository admin removes a branch.
   deleting push of dev, main, a branch, a safety or vault branch,
   preflight or not.
 - On a forge the rulesets are the authority, as in neo-git: `rapid-protected`
-  and `rapid-main` keep dev and main, `rapid-branch-deletions` the branches,
+  and `rapid-main` keep dev and main,
   `rapid-safety-lockdown` the safety branches (no update or deletion),
   `rapid-vault-readonly` the vault branches (no update or deletion) and
   `rapid-branch-deletions` the branches (no deletion); only repository admins
@@ -134,8 +131,9 @@ branches forked from one dev tip never share an anchor). Nothing ever deletes
 or moves it: the branch may be synced, renamed, left not landed or landed
 and deleted, and its fork point (`safety/v<series>/<number>.<kind>.<slug>^1`) is still there.
 
-- Every push that carries a branch carries its anchor: pre-push pushes it
-  first when the remote lacks it (and a clone sharing a coworker's branch
+- Every push that carries a branch carries its anchor: pre-push sends it in
+  one push right after the push that carries the branch when the remote lacks
+  it (and a clone sharing a coworker's branch
   takes origin's anchor, never a second one), `rapid land` puts it
   in its atomic push, and `rapid sync --dev` publishes the anchors of branches
   landed offline. A branch made by hand or before anchors existed gets one
@@ -264,9 +262,7 @@ remote is transport, never publishing.
   `max_commits + 1` is refused before it is written (`prepare-commit-msg`;
   an amend passes); a branch's first commit never carries the placeholder
   requirement, and with `gates_commit` set the staged tree must pass it
-  (`pre-commit`); a branch push is refused above `max_commits` or when a
-  commit fails the fast gate without a valid `Red:` (`pre-push`, the same
-  check as `rapid check --each`).
+  (`pre-commit`); a branch push is refused above `max_commits` (`pre-push`).
 
 ## Merges (written by `rapid land`, never by hand)
 
@@ -403,7 +399,9 @@ origin is a GitHub repository and `gh` is present, the forge's release
 object is created on `release/<v>` with the artifacts and the tag's message
 as notes. The artifacts stay in `.git/rapid-artifacts/<v>`: `rapid release
 --publish [<v>]` ships them again after a failed channel, refusing any file
-whose checksum is not in the manifest. (`rapid doctor --history`)
+whose checksum is not in the manifest.
+
+## History checks
 
 `rapid doctor --history` checks merges in full only after the last dev tip
 this clone verified clean: a note in the clone's git dir
@@ -468,7 +466,9 @@ and `.rapid/admins`: a commit that changes one is a
 policy flip, its own `[MODE]` commit of policy files only, authored and
 committed by an admin listed in `.rapid/admins` on dev (commit-msg, land,
 pre-push, I4), so no lander can empty a gate, open `land_who` or raise
-`max_commits` on their own. `rapid setup` writes the setup author, when a human, as the first
+`max_commits` on their own. Under `signed=required` the flip is also signed by an
+admin, the signer verified with `.rapid/signers` on dev; without `signed=required` an admin-only flip
+rests on the address the committer's git reports, which is an address by convention. `rapid setup` writes the setup author, when a human, as the first
 admin in the root commit; with no admin listed, the one flip allowed is the
 `[MODE]` commit that creates
 `.rapid/admins`. An agent session, which never releases, is known by `CLAUDECODE`,

@@ -31,7 +31,7 @@ Rules.
      force or delete push, branch -D/-M, rebase, filter-branch/filter-repo, stash drop/clear,
      reflog expire, gc --prune, update-ref -d, prune, worktree remove --force, tag -d) without a
      preflight backup that matches the repository now: a preflight-bak-* commit whose parent is the
-     current HEAD (on origin when the repo has one), younger than PREFLIGHT_MAX_AGE_H, with its zip
+     current HEAD (a local ref: a preflight never reaches a remote), younger than PREFLIGHT_MAX_AGE_H, with its zip
      still on disk, and no changed path modified after it was taken.
      Exempt: throwaway repos whose worktree AND git common dir live under a temp root; a force push
      from one is exempt only when every remote is itself under a temp root.
@@ -42,7 +42,7 @@ Rules.
      preflight script itself.
   3. No push to main (a main destination, --all or --mirror, or a bare push with main checked
      out), no bare --force or +refspec push, no remote repo deletion, no filter-branch -- --all,
-     no git -c alias.<name>=!<shell>. main is production and only the owner promotes dev to
+     no git -c alias.<name>=!<shell>; git send-pack is judged as the push it is. main is production and only the owner promotes dev to
      it: an agent never runs `rapid release` (its --dry-run is allowed), however it is invoked
      (rapid, .rapid/rapid, a path to it, a renamed copy or a link: any file whose content is rapid's or
      whose directory holds lib/policy.sh, or a shell given one as its script), and never creates, writes
@@ -54,11 +54,12 @@ Rules.
   5. Protocol staging and trailer rules: no git add -A / . / :/ / -u, no commit -a, no staging of
      secrets or build output, no Co-Authored-By: Claude trailer on a commit or through
      interpret-trailers, no commit or push --no-verify in a real repository (the hooks are the
-     protocol's gates; commit-msg, land, pre-push and I4 also refuse a human author under an agent
-     committer, so a foreign --author never lands). An agent pushes
+     protocol's gates). An agent pushes
      no version tag (v<year>.<n>.<n>) and no --tags / --follow-tags: version tags come only from
      rapid land, and never moves one (git tag -f, update-ref). git's hooks stay at .rapid/hooks: no
-     core.hooksPath set elsewhere or unset (git config, git -c, GIT_CONFIG_KEY_n).
+     core.hooksPath set elsewhere or unset (git config, git -c, GIT_CONFIG_KEY_n), no chmod and no
+     git update-index --chmod on a path under a vendored .rapid (git skips a hook it cannot execute),
+     and no RAPID_BATCH_CLOSE_PUSH or RAPID_JUDGED in front of a command (rapid sets them itself).
   6. Indirection the guard cannot follow is refused: a shell reading its script from a pipe, a
      run-time value as a git subcommand or option on a destructive-capable subcommand, a command
      set through the git -c and GIT_CONFIG_KEY_n keys and the GIT_PAGER / GIT_SSH_COMMAND style
@@ -715,6 +716,13 @@ def check_command(words, redirs, env, envprefix, ctx, depth, xargs):
              "one variable you need. Offending: %s" % ctx.raw)
     words, env, wx, scripts = peel(words, env)
     xargs = xargs or wx
+    # rapid sets these two for its own child processes only: the first opens the one-push guard of an
+    # open batch, the second makes a branch's own hooks judge it instead of dev's
+    for k in ("RAPID_BATCH_CLOSE_PUSH", "RAPID_JUDGED"):
+        if k in env:
+            deny("%s blocked (rapid guard): rapid sets it for its own child processes; set by hand it switches a "
+                 "check off (the one push of an open batch, the judging of a branch by dev's framework). "
+                 "Offending: %s" % (k, ctx.raw))
     for sc in scripts:
         parse_script(sc, Ctx(ctx.cwd, ctx.raw), depth + 1)
     if not words:
@@ -1309,6 +1317,9 @@ def check_git(args, env, envprefix, ctx, words):
         deny("A git subcommand computed at run time blocked (rapid guard). Offending: %s" % raw)
     # Arguments computed at run time ($VAR, $(...), `...`) can name main or --hard; the guard
     # compares literals, so a risky subcommand with one is refused (re-audit H2).
+    # send-pack is push without the pre-push hook: the push rules judge it
+    if sub == "send-pack":
+        sub = "push"
     if sub in GIT_RISKY_SUBS and any(w.dynamic or "$" in w.text or "`" in w.text for w in rest[1:]):
         deny("git %s with an argument computed at run time blocked (rapid guard): write the value out. Offending: %s"
              % (sub, raw))
@@ -1345,6 +1356,12 @@ def check_git(args, env, envprefix, ctx, words):
         if a == "--output" or a.startswith("--output="):
             v = a.split("=", 1)[1] if "=" in a else (sargs[j + 1] if j + 1 < len(sargs) else "")
             _check_clobber([Word(v, "$" in v, v)], ctx, env, "git --output")
+    # a hook git cannot execute is a hook git skips: no mode change inside a vendored .rapid
+    if sub == "update-index" and any(a.startswith("--chmod") for a in sargs):
+        for a in _pos(sargs):
+            p = a if a.startswith("/") else os.path.join(gdir or ctx.cwd or "/", a)
+            if vendored(p):
+                deny(VENDORED_MSG % p)
     temp_repo = bool(gdir) and is_tmp(gdir)
     # hooks are the protocol's gates: an agent never skips them in a real repo (round 2 L5)
     if not temp_repo and sub in ("commit", "push", "merge") and any(a == "--no-verify" or (sub == "commit" and a == "-n")
@@ -1801,9 +1818,8 @@ def require_preflight(destructive, gdir, git_dir, sargs, sub, ctx, raw):
 
 def preflight_matches(root, root_p):
     """(True, "") when a preflight backup covers the repository as it is now."""
-    has_origin = git("remote", "get-url", "origin", cwd=root) is not None
-    pattern = "refs/remotes/origin/" if has_origin else "refs/heads/"
-    where = "on origin" if has_origin else "locally (repo has no origin)"
+    # the backup ref is local: git-preflight.sh pushes nothing
+    pattern, where = "refs/heads/", "in this clone"
     refs = git("for-each-ref", "--sort=-committerdate", "--format=%(committerdate:unix) %(refname)", pattern, cwd=root) or ""
     head = git("rev-parse", "--verify", "-q", "HEAD", cwd=root) or ""
     now, limit = time.time(), MAXH * 3600
@@ -1918,6 +1934,9 @@ def check_bash_writes(name, args, redirs, ctx, env):
     elif name == "dd":
         targets += [Word(w.text[3:], w.dynamic, w.raw) for w in args if w.text.startswith("of=")]
     elif name in ("trash", "mkdir"):
+        targets += [w for w in args if not w.text.startswith("-")]
+    elif name == "chmod":
+        # chmod -x on a hook makes git skip it; the mode word is no path under .rapid, so every word is tried
         targets += [w for w in args if not w.text.startswith("-")]
     for w in targets:
         p = expand(w, ctx.cwd, env)
