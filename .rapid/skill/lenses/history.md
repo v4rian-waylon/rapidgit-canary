@@ -30,7 +30,7 @@ applies only to commits not landed yet; a landed defect is fixed forward by a
   (enforced), never a preflight ref in a push; `rebase -i` is unavailable:
   use a non-interactive rebase or a `commit-tree` walker that passes
   `%an %ae %aI` (a walker over the owner's commits is the owner's to run).
-- Origin holds the canonical preflight refs; refresh local copies from it.
+- Preflight refs stay local, beside their zips; they are never pushed.
 
 ## Conflicts (`rapid sync`, `rapid sync --dev`, cherry-pick)
 - Find them canonically (`git diff --name-only --diff-filter=U`,
@@ -49,7 +49,7 @@ applies only to commits not landed yet; a landed defect is fixed forward by a
 
 ## Recover
 - "Stop", "revert", "undo", "roll back": restore from the latest preflight
-  (`preflight-bak-*` on origin, or `refs/rapid/preflight/<slug>/*`), keep
+  (a local `preflight-bak-*` branch, or `refs/rapid/preflight/<slug>/*`), keep
   backups until the owner accepts the result, and ask before anything
   irreversible (repo deletion is refused outright by the guard).
 - After an accidental rewrite: stop, find the originals (reflog, messages),

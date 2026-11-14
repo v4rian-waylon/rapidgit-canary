@@ -33,11 +33,11 @@ Enforced points are named once; the rest is yours to judge before `git commit`.
 - Opens with a 1 to 3 sentence paragraph at subsystem altitude: the title
   says what, the paragraph why and at what scope, the bullets how; never
   restate the title.
-- `[FIX]`/`[HOTFIX]`: the paragraph, then `Cause:`, then `Fix:`, then the
-  bullets (enforced). Other tags: bullets right after the paragraph; no
+- `[FIX]`/`[HOTFIX]`: the paragraph, then `Cause:`, then `Fix:` (that order
+  is enforced), then the bullets. Other tags: bullets right after the paragraph; no
   `Changes:` header.
 - Never in a message: `BAK`, `bak import`, `historical import`,
-  `pre ATM role`, `captured in`, `from the zip`, `recovered from`,
+  `captured in`, `from the zip`, `recovered from`,
   `reconstructed`, `WIP snapshot`, `in this zip`.
 
 ## Bullets
@@ -66,10 +66,12 @@ Enforced points are named once; the rest is yours to judge before `git commit`.
 
 ## Hygiene
 - Stage by name (the guard refuses `git add -A`, `.`, `-u`, `commit -a`).
-- Never stage `.DS_Store`, `.auth/`, `keys/`, certificates and profiles,
-  `build/`, `build-*/`, `node_modules/`, `.env`, `exports/`, `*.zip`,
-  `aqtinstall.log`, `runtime-smoke-notes.md`, `*.bak`, `*_old.qml`,
-  `test_simple.qml`, or a file the workspace bans; keep them in `.gitignore`.
+- Never stage a banned file (the list is `RAPID_BANNED_RE` in
+  `lib/core.sh`): `.DS_Store`, `.auth/`, `keys/`, certificates and profiles
+  (`*.p8`, `*.p12`, `*.cer`, `*.pem`, `*.provisionprofile`,
+  `*.mobileprovision`), `build/`, `build-*/`, `node_modules/`, `.env` and
+  `.env.*` (an `.env.example`, `.sample`, `.template` or `.dist` passes),
+  `*.zip`, `*.bak`; keep them in `.gitignore`.
 - The repository's gates carry its syntax check (`node --check` for JS).
 - No em or en dash in staged prose; a regex or fixture that needs one writes
   the `–`/`—` escape with a comment saying why.

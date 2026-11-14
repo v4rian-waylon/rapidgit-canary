@@ -4,7 +4,7 @@ neo-git carried 16 skills (lenses) of agent rules. rapidgit keeps one skill: `SK
 and the lens files beside it, each read only for its task. This map lists every distinct rule of every
 neo-git lens (ids `<lens>.<n>`, in the lens order) and where rapidgit holds it: a lens file and section, the
 skill itself, or the code that enforces it. "machinery gone" marks a rule about neo-git machinery the owner
-removed (branch numbers, anchors, claim amend, modes); its intent, where it survives, is held elsewhere and
+removed (the allocator workflow, the claim amend, modes); its intent, where it survives, is held elsewhere and
 named. main is production: only the owner promotes dev to main. Not loaded for tasks; it is the audit trail
 that no rule was lost (`lint/docs.sh` checks every home file exists).
 
@@ -14,8 +14,8 @@ that no rule was lost (`lint/docs.sh` checks every home file exists).
 | Rule | neo-git rule | Home in rapidgit |
 |---|---|---|
 | neo-git.1 | Pick the one task row and read only its lenses; never load whole RUNBOOK/strategy docs | SKILL.md lens table |
-| neo-git.2 | Canonical framework source is the framework repo dev; never edit a vendored copy | enforced: `agent/guard-write.sh`, agent-guard; `.rapid/FRAMEWORK` marker; AGENTS.md |
-| neo-git.3 | Skill overrides from ~/.config/neo-git/skills, one copy per skill | machinery gone: user overrides cut, REPLAY row 136; one skill, intent irrelevant |
+| neo-git.2 | Canonical framework source is the framework repo dev; never edit a vendored copy | enforced: `agent/guard-write.sh`, agent-guard; `.rapid/FRAMEWORK` marker; skill/AGENT.md |
+| neo-git.3 | Skill overrides from ~/.config/neo-git/skills, one copy per skill | machinery gone: user overrides cut; one skill, intent irrelevant |
 | neo-git.4 | Detect model: branch layout vs legacy feature/* | machinery gone: single branch model; intent irrelevant |
 | neo-git.5 | Before any git write export GIT_AUTHOR_*/GIT_COMMITTER_* for the origin org's account; the user's own identity only for rebuilds of the user's ... | machinery gone: repository access decides who commits; rebuild.md Common (identity) |
 | neo-git.6 | A multi-row plan names every inventory lens with where it applies or why N/A | SKILL.md Always |
@@ -27,8 +27,8 @@ that no rule was lost (`lint/docs.sh` checks every home file exists).
 | neo-git.12 | No PR unless asked | SKILL.md Always |
 | neo-git.13 | Merge body is the claim's PR paragraph + PR body verbatim; into main the release roster | machinery gone: claim |
 | neo-git.14 | main moves only on the user's explicit instruction; automation never writes dev or main without a verbatim grant. main: | SKILL.md intro (main); SKILL.md Always (land) |
-| neo-git.15 | Push right after each commit; push every ref you create plus tags; verify each push with `git ls-remote`; zsh-safe refspecs | SKILL.md Always; forge.md Pushes |
-| neo-git.16 | Never pick nN, never push self-made pool/safety refs | machinery gone: allocator; slug uniqueness I7 ENFORCED at branch/sync/land |
+| neo-git.15 | Push right after each commit; push every ref you create plus tags; verify each push with `git ls-remote`; zsh-safe refspecs | changed: a branch is shared with `rapid sync --push`, never while a batch is open, and the close of a batch sends its one push; SKILL.md Always; forge.md Pushes |
+| neo-git.16 | Never pick nN, never push self-made pool/safety refs | enforced: pre-push, guard rule 8, rapid-safety-lockdown; SKILL.md 1 and 8 |
 | neo-git.17 | One branch = one feature area, ~20 commits max; bigger = sequence | enforced: `max_commits=20`, land refuses; branch-size |
 | neo-git.18 | Safety anchors stay forever; manual snapshots and bak zips go to Trash only on user direction, never hard-deleted. Anchors | history.md Recover (backups kept); branches not landed yet never deleted (pre-push) |
 | neo-git.19 | No empty commits | SKILL.md Always |
@@ -84,7 +84,7 @@ that no rule was lost (`lint/docs.sh` checks every home file exists).
 | commit-audit.12 | [FIX]/[HOTFIX]: `Cause:` then `Fix:` then bullets | commit.md |
 | commit-audit.13 | Other tags: bullets directly after the paragraph; no `Changes:` header | commit.md |
 | commit-audit.14 | [MERGE] body per merge-audit. See merge-audit. | commit.md |
-| commit-audit.15 | Banned mechanism words anywhere: BAK, bak import, historical import, pre ATM role, captured in, from the zip, recovered from, reconstructed, WIP ... | commit.md |
+| commit-audit.15 | Banned mechanism words anywhere: BAK, bak import, historical import, captured in, from the zip, recovered from, reconstructed, WIP ... | commit.md |
 | commit-audit.16 | V.1 top bullet leads with class/module name, not a path (unless the path is the story) | commit.md |
 | commit-audit.17 | V.2 methods nest under their class; class name not repeated | commit.md |
 | commit-audit.18 | V.3 bullets name classes/functions/methods only (no fields, properties, constants, handlerless signals) | commit.md |
@@ -95,7 +95,7 @@ that no rule was lost (`lint/docs.sh` checks every home file exists).
 | commit-audit.23 | V.8 standard verbs (Creates, Deletes, Updates, Reads, Writes, Schedules, Dispatches, Returns, Throws, Adds, Exposes, Drops); banned: Stands up, ... | commit.md |
 | commit-audit.24 | V.9 new symbol declarative present; modified symbol uses "now" | commit.md |
 | commit-audit.25 | V.10 never fabricate a symbol: grep each bullet name in the committed tree (`git show <sha>:<path>`) | commit.md |
-| commit-audit.26 | No staged .DS_Store, .auth/, keys/, certs/profiles, build/, build-*/, node_modules/, .env, exports/, *.zip, aqtinstall.log, ... | commit.md Hygiene |
+| commit-audit.26 | No staged .DS_Store, .auth/, keys/, certs/profiles, build/, build-*/, node_modules/, .env, exports/, *.zip, ... | commit.md Hygiene |
 | commit-audit.27 | Stage by name; never `git add -A`/`.` | enforced: guard rule 5, also -u, :/, commit -a |
 | commit-audit.28 | `node --check` passes for staged JS | commit.md Hygiene; verify.md Compile |
 | commit-audit.29 | Dashes in staged files rewritten; fixtures use escapes with a comment | commit.md |
@@ -132,12 +132,12 @@ that no rule was lost (`lint/docs.sh` checks every home file exists).
 | merge-audit.11 | Forbidden (code pole): file/dir names, byte counts/timeouts, protocol/RFC refs, code-construct names, reviewer implementation verbs, token literals | merge.md |
 | merge-audit.12 | Forbidden (manual pole): outcome pitch (actually works, just works, becomes usable), anthropomorphized assistant verbs, end-user benefit framing ... | merge.md |
 | merge-audit.13 | This merge only: no reference to prior merges, siblings, future work; absolute terms | merge.md |
-| merge-audit.14 | Forbidden in title/body: BAK, bak import, historical import, pre ATM role, captured in, from the zip, recovered from, reconstructed, WIP snapshot, ... | merge.md |
+| merge-audit.14 | Forbidden in title/body: BAK, bak import, historical import, captured in, from the zip, recovered from, reconstructed, WIP snapshot, ... | merge.md |
 | merge-audit.15 | "rebuild" never as a noun; feature-led framing | merge.md |
 | merge-audit.16 | No Co-Authored-By: Claude | enforced: see RULES.md |
 | merge-audit.17 | `--no-ff` always | enforced: land, I1 |
 | merge-audit.18 | Branch->dev merge dated at source tip %cI | rebuild.md Common (dates) |
-| merge-audit.19 | dev->main merge dated at dev tip | machinery gone: main fast-forwards |
+| merge-audit.19 | dev->main merge dated at dev tip | machinery gone: the release merge is written by `rapid release`, never by hand |
 | merge-audit.20 | Only working branches merge into dev, under the canonical naming | enforced: land, pre-push, I1 |
 | merge-audit.21 | dev merges into main at every release/zip close | SKILL.md intro; rebuild.md Common |
 | merge-audit.22 | One tagged [MERGE] per branch; no untagged duplicates | enforced: I1, I2, I7 |
@@ -181,10 +181,10 @@ that no rule was lost (`lint/docs.sh` checks every home file exists).
 | rewrite.9 | Blank-repo wipe: orphan, empty tree, empty message, no tombstone; delete other branches | machinery gone: pre-push/rulesets forbid deleting or rewriting dev/main; guard denies push to main |
 | rewrite.10 | Wipe proceeds without asking because a safety snapshot makes it reversible | machinery gone: safety snapshots |
 | rewrite.11 | Force-push only with --force-with-lease on pushed branches | enforced: guard rule 3; rapid sync never pushes |
-| rewrite.12 | Never include preflight-bak-* in a force push | enforced: F1: pre-push refuses any push of a non-branch; guard denies --no-verify |
+| rewrite.12 | Never include preflight-bak-* in a force push | enforced: pre-push (only dev, main, pool, safety and vault branches pass the hook); guard denies --no-verify |
 | rewrite.13 | Deleting a default branch: change default first (admin) | machinery gone: dev/main never deleted, ENFORCED |
 | rewrite.14 | Sandbox blocks filter-branch: use walker or `rebase -i` with exec | history.md |
-| rewrite.15 | Origin is canonical for preflight refs; refresh local copies from origin | history.md |
+| rewrite.15 | Origin is canonical for preflight refs; refresh local copies from origin | changed: the preflight stays local, a branch and a zip, never pushed; history.md |
 | rewrite.16 | Snapshot affected branches as safety/<branch>-<ts>, push before rewriting; force back on rejection | history.md |
 
 ## git-snapshot-preflight
@@ -198,30 +198,30 @@ that no rule was lost (`lint/docs.sh` checks every home file exists).
 | preflight.5 | Identity exported (org or user), never git config/global/hardcoded | rebuild.md |
 | preflight.6 | Tree = the repo's full zip content minus sensitive files | rebuild.md |
 | preflight.7 | Orphan commit, no parent | rebuild.md |
-| preflight.8 | Push to origin first, before any rebuild commit | enforced: guard requires the ref on origin when one exists |
-| preflight.9 | Never delete the preflight branch on origin | enforced: F1 |
-| preflight.10 | Never rewrite its SHA or force-push against it | enforced: F1 |
+| preflight.8 | Push to origin first, before any rebuild commit | changed: the preflight stays local, never pushed; the guard requires a fresh one before destructive git |
+| preflight.9 | Never delete the preflight branch on origin | changed: the preflight is never on origin: pre-push (only dev, main, pool, safety and vault branches pass the hook) |
+| preflight.10 | Never rewrite its SHA or force-push against it | changed: the preflight is never pushed: pre-push (only dev, main, pool, safety and vault branches pass the hook) |
 | preflight.11 | Never filter-branch -- --all | enforced: guard |
 | preflight.12 | Exclude .git, __MACOSX, .DS_Store, .auth/, keys/, certs/profiles, node_modules/, .env, build/, build-*/, exports/, *.zip, workspace bans. Mostly | rebuild.md Zip chains |
 | preflight.13 | Build preflights in a scratch dir, never in the working repo | enforced: temp index, no checkout |
 | preflight.14 | No hardcoded paths; scratch via mktemp -d honouring TMPDIR | rebuild.md |
 | preflight.15 | Dispatch builds in parallel (10 workers) | rebuild.md |
-| preflight.16 | Verify every affected repo's preflight on origin via ls-remote before any rebuild commit | rebuild.md |
+| preflight.16 | Verify every affected repo's preflight on origin via ls-remote before any rebuild commit | changed: the preflight stays local, taken before any rebuild commit; rebuild.md Common |
 | preflight.17 | Never `git push origin --all` | enforced: guard rule 3 treats --all/--mirror as a main push |
-| preflight.18 | Never force-with-lease a preflight after the initial push | enforced: F1 |
-| preflight.19 | Recovery: restore local preflight ref from origin; if origin lost, rebuild from zip | rebuild.md |
+| preflight.18 | Never force-with-lease a preflight after the initial push | changed: the preflight is never pushed: pre-push (only dev, main, pool, safety and vault branches pass the hook) |
+| preflight.19 | Recovery: restore local preflight ref from origin; if origin lost, rebuild from zip | changed: the preflight is never on origin; a lost local ref is rebuilt from the zip; rebuild.md Zip chains |
 
 ## git-snapshots
 
 | Rule | neo-git rule | Home in rapidgit |
 |---|---|---|
 | snapshots.1 | Establish scope first (workspace, bak dir, mirror, in-scope repos, identity): infer in order (user path, multi-repo cwd, baks/ dir, CLAUDE.md), ... | rebuild.md |
-| snapshots.2 | Before any force/delete push, reset --hard, filter-branch, rebase: safety-snapshot each affected branch and push it first | history.md How (preflight) |
+| snapshots.2 | Before any force/delete push, reset --hard, filter-branch, rebase: safety-snapshot each affected branch and push it first | changed: the snapshot is the local preflight, never pushed; history.md How (preflight) |
 | snapshots.3 | On "stop/revert/undo/roll back" restore from the latest safety snapshot | history.md Recover |
 | snapshots.4 | Keep safety snapshots until the user accepts the result | history.md Recover |
 | snapshots.5 | Irreversible ops (repo delete, force push with no snapshot) need a genuine `Confirm IRREVERSIBLE` ask. Repo deletion | history.md Recover |
 | snapshots.6 | Step 0: extract each zip to a mktemp scratch preserving mtimes; find touched repos; compute date/NN | rebuild.md |
-| snapshots.7 | Step 1: safety + one preflight per affected repo, pushed before any rebuild commit | rebuild.md |
+| snapshots.7 | Step 1: safety + one preflight per affected repo, pushed before any rebuild commit | changed: the preflight stays local, taken before any rebuild commit; rebuild.md Common |
 | snapshots.8 | Step 2: plan topics/branches via strategy audit before committing | rebuild.md |
 | snapshots.9 | Step 3: commit-audit per commit; dates = staged subset latest mtime; paragraph opens body; [NEW] only for genuinely new | rebuild.md |
 | snapshots.10 | Step 4: after every merge into dev run merge, coverage, compile, runtime audits; on failure reset to safety and investigate | rebuild.md Common; verify.md |
@@ -243,16 +243,16 @@ that no rule was lost (`lint/docs.sh` checks every home file exists).
 |---|---|---|
 | strategy.1 | Decide strategy before the first commit | commit.md Plan |
 | strategy.2 | Pick the model (branch layout or legacy), never mix | machinery gone: cut by the owner |
-| strategy.3 | Layout main<-dev<-branch with paired safety anchor | machinery gone: branches; branches not landed yet stay branches |
+| strategy.3 | Layout main<-dev<-branch with paired safety anchor | RULES.md Branches; enforced: pre-push, I1 |
 | strategy.4 | main only from dev; dev only from branches | enforced: pre-push, I1, I5 |
 | strategy.5 | Version vYYYY.main.dev with resets | enforced: vYYYY.S.N, I2, version-math |
-| strategy.6 | Hotfixes follow dev->main, never a bypass | enforced: main only fast-forwards to a released dev commit, I5; HOTFIX is a branch |
+| strategy.6 | Hotfixes follow dev->main, never a bypass | enforced: main moves only by a release merge of a released dev commit, I5; HOTFIX is a branch |
 | strategy.7 | Cut the branch off dev; merge --no-ff into dev | enforced: `rapid branch` from dev; land |
 | strategy.8 | Lay out atomic commits and name the branch first | SKILL.md |
 | strategy.9 | Heuristics: one new file = one commit; one refactor pass = one; one bug fix = one; adjacent tooling = own commit; in doubt split | commit.md Plan |
-| strategy.10 | Branch format regex | enforced: pool/v<series>/<kind>.<slug>, kinds feature fix refactor docs test chore |
-| strategy.11 | nN from the allocator | machinery gone: cut by the owner |
-| strategy.12 | Paired safety anchor, never touched | machinery gone: cut by the owner |
+| strategy.10 | Branch format regex | enforced: pool/v<series>/n<N>.<kind>.<slug>, kinds feature fix refactor docs test chore |
+| strategy.11 | nN from the allocator | enforced: `rapid branch` numbers the branch, I7; SKILL.md 1 |
+| strategy.12 | Paired safety anchor, never touched | enforced: pre-push, guard rule 8, rapid-safety-lockdown; SKILL.md 1 and 8 |
 | strategy.13 | Forbidden in branch names: zipN, bak, wip, snapshot, historical, preflight, recovered, reconstructed, from-zip, captured-in; uppercase. Uppercase | enforced: slug regex |
 | strategy.14 | Names describe the feature, not the mechanism; no `temp` | commit.md Plan |
 | strategy.15 | --no-ff always | enforced: see RULES.md |
@@ -286,14 +286,14 @@ that no rule was lost (`lint/docs.sh` checks every home file exists).
 | Rule | neo-git rule | Home in rapidgit |
 |---|---|---|
 | compile.1 | Node: `npm install --silent --no-audit --no-fund` and `node --check` every JS outside node_modules/build | verify.md Compile |
-| compile.2 | Qt lib: clean build dir, cmake configure + build; static lib and QML plugin lib emitted | verify.md Compile |
-| compile.3 | Qt app: needs adjacent lib repos; for a historical point use each lib's latest preflight dated <= the zip date | verify.md Compile |
-| compile.4 | Pass = .app emitted | verify.md Compile |
+| compile.2 | Compiled library: clean build dir, configure + build; the library is emitted | verify.md Compile |
+| compile.3 | Compiled app: needs adjacent lib repos; for a historical point use each lib's latest preflight dated <= the zip date | verify.md Compile |
+| compile.4 | Pass = the build product emitted | verify.md Compile |
 | compile.5 | Compile after each merge into dev and on main after release | enforced: land on every merge tree; gates_release |
 | compile.6 | Save build logs to a per-run mktemp dir; the log is the audit trail | verify.md Compile |
 | compile.7 | On failure diagnose by kind; fix in the atomic commit that introduced it | verify.md Compile |
 | compile.8 | Run up to 4 compiles in parallel | verify.md Compile |
-| compile.9 | Banned: Qt app without matching-date lib preflights; skipping npm install because node_modules exists; judging by cmake warnings (only the build ... | verify.md Compile |
+| compile.9 | Banned: a compiled app without matching-date lib preflights; skipping npm install because node_modules exists; judging by build warnings (only the build ... | verify.md Compile |
 
 ## git-coverage-audit
 
@@ -301,7 +301,7 @@ that no rule was lost (`lint/docs.sh` checks every home file exists).
 |---|---|---|
 | coverage.1 | Preflight coverage: preflight tree byte-identical to the zip extract, no allowed diff | verify.md Coverage |
 | coverage.2 | Merge coverage: after each dev merge and dev->main at zip close, tree byte-identical to the zip minus sensitive files, README.md and .gitignore | verify.md Coverage |
-| coverage.3 | Use `diff -r --brief` with exactly the sensitive + README + .gitignore (+aqtinstall.log) excludes | verify.md Coverage |
+| coverage.3 | Use `diff -r --brief` with exactly the sensitive + README + .gitignore excludes | verify.md Coverage |
 | coverage.4 | Pass iff zero differ lines, zero only-in-repo (beyond allowed), zero only-in-zip | verify.md Coverage |
 | coverage.5 | Differ: inspect with `diff -u`; whitespace-only is acceptable but documented; content -> amend the right commit | verify.md Coverage |
 | coverage.6 | Only in zip -> add in the right atomic commit; only in repo -> gitignore+drop or document | verify.md Coverage |
@@ -355,10 +355,10 @@ that no rule was lost (`lint/docs.sh` checks every home file exists).
 | shuttle.10 | Step 4 ask push policy; probe credentials non-hanging (gh auth status; credential fill only with timeout; ssh BatchMode) and halt until they work; ... | rebuild.md Folder snapshots |
 | shuttle.11 | Step 5 writing existing dev/main needs the user's verbatim grant, recorded; no grant -> parallel branches | rebuild.md Folder snapshots |
 | shuttle.12 | Step 6 confirm the full summary, wait for explicit yes; no questions after except irreversible steps | rebuild.md Folder snapshots |
-| shuttle.13 | Step 7 also reach the user by voice before executing where voice-ask exists | rebuild.md Folder snapshots |
+| shuttle.13 | Step 7 also reach the user by voice before executing where the workspace has a voice channel | rebuild.md Folder snapshots |
 | shuttle.14 | Snapshots for one target run in chronological order, each against the previous one's commits | rebuild.md Folder snapshots |
-| shuttle.15 | A backup: `cp -pR` snapshots, `git clone --mirror` targets, push a preflight-bak before any commit; never delete/force it | rebuild.md Folder snapshots |
-| shuttle.16 | B scope: exclude .git, node_modules, dist, build*, lock files, *.log, .DS_Store, .session, *.bak, *_old.qml plus workspace bans; apply path ... | rebuild.md Folder snapshots |
+| shuttle.15 | A backup: `cp -pR` snapshots, `git clone --mirror` targets, push a preflight-bak before any commit; never delete/force it | changed: the preflight is taken, never pushed; rebuild.md Folder snapshots |
+| shuttle.16 | B scope: exclude .git, node_modules, dist, build*, lock files, *.log, .DS_Store, .session, *.bak plus workspace bans; apply path ... | rebuild.md Folder snapshots |
 | shuttle.17 | C parent commit via content-match: 100% skip; >=90% parent; <90% parent with note; ties earliest author date; <~30% run C.5 first, halt only if ... | rebuild.md Folder snapshots |
 | shuttle.18 | C.5 cross-repo integration check over target, named siblings and declared lineage (ask if unknown); write integration.tsv/summary | rebuild.md Folder snapshots |
 | shuttle.19 | D diff parent vs snapshot for orphans into NEW/MODIFIED/DELETED | rebuild.md Folder snapshots |
@@ -371,7 +371,7 @@ that no rule was lost (`lint/docs.sh` checks every home file exists).
 | shuttle.26 | Re-push with `--force-with-lease=<branch>:<sha from fresh ls-remote>` | rebuild.md Folder snapshots |
 | shuttle.27 | Push each action within seconds; never batch | rebuild.md Folder snapshots |
 | shuttle.28 | G verify coverage, compile, runtime; on failure halt, report, ask or roll back from the mirror; never skip | rebuild.md Folder snapshots |
-| shuttle.29 | Output run dir (manifest with grants verbatim, BACKUP, per-snapshot artifacts, REPORT.md); deliver to the outbound shuttle | rebuild.md Folder snapshots |
+| shuttle.29 | Output run dir (manifest with grants verbatim, BACKUP, per-snapshot artifacts, REPORT.md); deliver to the workspace delivery path | rebuild.md Folder snapshots |
 | shuttle.30 | Banned: touching user commits; hardcoded paths/identities/grants; inferring a dev/main grant; force without lease; ever force-pushing main; ... | enforced: guard |
 | shuttle.31 | Use git-snapshots for zip chains, git-shuttle for folders, both for mixed | rebuild.md Folder snapshots |
 

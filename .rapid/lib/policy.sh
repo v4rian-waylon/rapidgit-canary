@@ -19,7 +19,7 @@
 #                            CLAUDE_CODE_ENTRYPOINT and CODEX_* (rapid_agent_session): such a session never
 #                            releases (default unset)
 #   smart_commit_cmd=<cmd>   rapid commit --smart: the command that reads the prompt on stdin and prints the
-#                            message (default: the claude CLI in print mode, fresh context, read-only tools)
+#                            message (default: the claude CLI in print mode, fresh context, no tools)
 #   forge_repo=OWNER/REPO    the forge repository when origin's URL does not name it
 #   tracker=none             the committed conf may only say none (lib/tracker.sh)
 #   reqs_id=TOKEN            the project token of REQUIREMENTS.md IDs, <TOKEN>-R-<slug> (default REQ; lib/reqs.sh)
@@ -175,20 +175,28 @@ rapid_release_signed() {
 # main moves only by a release, so only the owner changes them; without it
 # git's own config verifies, which the releaser's machine controls.
 rapid_release_sig_problem() {
-  local t="$1" gov="$2" tip="$3" af="" raw signer why c=()
+  local t="$1" gov="$2" tip="$3" signer why
   rapid_release_signed "$gov" "$tip" || return 0
-  if git cat-file -e "$gov:.rapid/signers" 2>/dev/null; then
-    af=$(mktemp "${TMPDIR:-/tmp}/rapid-signers.XXXXXX"); git show "$gov:.rapid/signers" > "$af"
-    c=(-c "gpg.ssh.allowedSignersFile=$af")
-  fi
-  raw=$(git ${c[@]+"${c[@]}"} verify-tag --raw "$t" 2>&1) || raw=""
-  [ -z "$af" ] || rm -f "$af"
-  signer=$(sed -nE 's/^Good "git" signature for ([^ ]+) with .*/\1/p; s/^\[GNUPG:\] GOODSIG [^ ]+ .*<([^>]+)>.*/\1/p' <<<"$raw" | sed -n 1p)
+  signer=$(rapid_verified_signer tag "$t" "$gov")
   if [ -z "$signer" ]; then
-    echo "${t#refs/tags/} carries no signature git verifies$([ -z "$af" ] || echo " against .rapid/signers at main") (signed=required): the owner signs it, as rapid release does under signed=required"
+    echo "${t#refs/tags/} carries no signature git verifies$(! git cat-file -e "$gov:.rapid/signers" 2>/dev/null || echo " against .rapid/signers at main") (signed=required): the owner signs it, as rapid release does under signed=required"
     return 0
   fi
   why=$(rapid_policy_may_release "$gov" "$tip" "$signer") || echo "${t#refs/tags/} is signed by '$signer': $why"
+}
+
+# rapid_verified_signer tag|commit OBJECT REV: who signed OBJECT, as git verifies it: the
+# principal (ssh) or the GOODSIG email (gpg); empty without a good signature. The keys come
+# from .rapid/signers committed at REV when it exists, else from git's own config.
+rapid_verified_signer() {
+  local af="" raw c=()
+  if git cat-file -e "$3:.rapid/signers" 2>/dev/null; then
+    af=$(mktemp "${TMPDIR:-/tmp}/rapid-signers.XXXXXX"); git show "$3:.rapid/signers" > "$af"
+    c=(-c "gpg.ssh.allowedSignersFile=$af")
+  fi
+  raw=$(git ${c[@]+"${c[@]}"} "verify-$1" --raw "$2" 2>&1) || raw=""
+  [ -z "$af" ] || rm -f "$af"
+  sed -nE 's/^Good "git" signature for ([^ ]+) with .*/\1/p; s/^\[GNUPG:\] GOODSIG [^ ]+ .*<([^>]+)>.*/\1/p' <<<"$raw" | sed -n 1p
 }
 
 # rapid_docs_named BASE TIP REQFILE: with docs_rules set, a branch that changes
@@ -216,6 +224,28 @@ rapid_docs_named() {
   [ -z "$got" ] || echo "Docs: ${got#, }"
 }
 
+# rapid_log_tail LOG: the last 25 lines of a gate's log as a gate record keeps them. The
+# record is pushed with dev and never rewritten, so every value (8 characters or more) of an
+# environment variable whose name holds TOKEN, SECRET, KEY, PASSWORD or CREDENTIAL is
+# replaced with <redacted> first.
+rapid_log_tail() {
+  { tail -n 25 "$1" 2>/dev/null || true; } | awk '
+    BEGIN {
+      for (k in ENVIRON) if (toupper(k) ~ /TOKEN|SECRET|KEY|PASSWORD|CREDENTIAL/) {
+        c = split(ENVIRON[k], part, "\n")
+        for (i = 1; i <= c; i++) if (length(part[i]) >= 8) v[++n] = part[i]
+      }
+    }
+    {
+      for (i = 1; i <= n; i++) {
+        out = ""
+        while ((j = index($0, v[i])) > 0) { out = out substr($0, 1, j - 1) "<redacted>"; $0 = substr($0, j + length(v[i])) }
+        $0 = out $0
+      }
+      print
+    }'
+}
+
 # rapid_gate NAME DIR: run gates_NAME in DIR; prints pass|fail|none, rc 0 unless fail.
 # With RAPID_GATE_REC set (a file path), the run, green or red, is recorded
 # there: its command, exit code, duration and log tail (rapid land's gate log).
@@ -234,7 +264,7 @@ rapid_gate() {
       printf 'gate=%s\ncommand=%s\nexit=%s\nduration=%ss\nat=%s\n' \
         "$name" "$cmd" "$rc" "$(( $(date +%s) - t0 ))" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
       printf -- '--- log tail\n'
-      tail -n 25 "$log" 2>/dev/null || true
+      rapid_log_tail "$log"
     } > "$RAPID_GATE_REC"
   fi
   if [ "$rc" = 0 ]; then rm -f "$log"; echo pass; return 0; fi
@@ -286,7 +316,8 @@ rapid_check_each() {
 # generated from it), authored and committed by an admin. Admins are read from
 # .rapid/admins as committed at RAPID_CONF_REV (the tip of dev at commit and at
 # land; the first parent of each merge in history), so a branch never makes
-# itself an admin. rapid setup writes its human runner, or the one --owner
+# itself an admin. Under signed=required the flip is also signed by an admin
+# (rapid_flip_signer_problem): the email alone is whatever its author types. rapid setup writes its human runner, or the one --owner
 # names, as the first admin in the root commit. With no admin at that revision
 # (a repository an agent set up without --owner), the one flip allowed is the
 # [MODE] commit that creates .rapid/admins.
@@ -344,7 +375,28 @@ rapid_policy_flip_problem() {
 # rapid_policy_flip_commit C: rapid_policy_flip_problem for commit C (its subject,
 # the files it changes against its parent, its author and committer).
 rapid_policy_flip_commit() {
-  local who ae an ce
+  local who ae an ce subj files f flip=0
   who=$(git log -1 --format='%ae%x09%an%x09%ce' "$1"); IFS=$'\t' read -r ae an ce <<<"$who"
-  rapid_policy_flip_problem "$(git log -1 --format=%s "$1")" "$(git diff-tree --no-commit-id --name-only -r "$1")" "$ae" "$an" "$ce"
+  subj=$(git log -1 --format=%s "$1"); files=$(git diff-tree --no-commit-id --name-only -r "$1")
+  rapid_policy_flip_problem "$subj" "$files" "$ae" "$an" "$ce"
+  [[ "$subj" != "[MODE] "* ]] || flip=1
+  for f in $files; do case " $RAPID_POLICY_FILES " in *" $f "*) flip=1 ;; esac; done
+  [ "$flip" = 0 ] || rapid_flip_signer_problem "$1"
+}
+
+# rapid_flip_signer_problem [COMMIT]: an email is whatever its author types, so under
+# signed=required at RAPID_CONF_REV a policy flip is signed by an admin: empty when
+# signed=required is off, no admin is listed yet, or the verified signer of COMMIT
+# (rapid_verified_signer, keys from .rapid/signers at that revision) is an admin; else why.
+# commit-msg passes a probe commit signed with the key the commit will carry (none: no key signs).
+rapid_flip_signer_problem() {
+  local rev="${RAPID_CONF_REV:-HEAD}" admins signer=""
+  [ "$(rapid_conf signed optional)" = required ] || return 0
+  admins=$(rapid_admins); [ -n "$admins" ] || return 0
+  [ -z "${1:-}" ] || signer=$(rapid_verified_signer commit "$1" "$rev")
+  if [ -z "$signer" ]; then
+    echo "the policy flip carries no signature git verifies$(! git cat-file -e "$rev:.rapid/signers" 2>/dev/null || echo " against .rapid/signers on dev") (signed=required): an admin signs a policy flip"
+  elif ! grep -Fx -- "$signer" <<<"$admins" >/dev/null; then
+    echo "the policy flip is signed by '$signer': '$signer' is not an admin (.rapid/admins on dev: $(tr '\n' ' ' <<<"$admins" | sed 's/ $//')); an admin flips policy"
+  fi
 }
