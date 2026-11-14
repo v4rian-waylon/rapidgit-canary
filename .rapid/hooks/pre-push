@@ -202,7 +202,15 @@ while read -r lref lsha rref rsha; do
         ! grep -E " $an [0-9a-f]+$" <<<"$lines" >/dev/null || continue
         ra=$(git ls-remote "$remote" "$an" 2>/dev/null | cut -f1 || true)
         if [ -z "$ra" ]; then
-          git push -q "$remote" "$an:$an" </dev/null || fail "could not push ${an}, the safety anchor of ${rref#refs/heads/}"
+          # queued: it goes up, with the others, in one push once this push is over (a push
+          # from inside a push makes a forge fail the outer one now and then)
+          aq="$(cd "$(git rev-parse --git-common-dir)" && pwd -P)/rapid/push-after.$PPID"; mkdir -p "${aq%/*}"
+          if [ ! -s "$aq" ]; then
+            ( while kill -0 "$PPID" 2>/dev/null; do sleep 0.2; done
+              # shellcheck disable=SC2046
+              git push -q "$remote" $(cat "$aq" 2>/dev/null); rm -f "$aq" ) </dev/null >/dev/null 2>&1 &
+          fi
+          printf '%s:%s\n' "$an" "$an" >> "$aq"
         elif [ "$ra" != "$(git rev-parse "$an")" ]; then
           case "$an" in
             refs/heads/safety/numbers/*) fail "$remote holds another $an (another branch took this number); carry this branch's commits to a new branch (rapid branch)" ;;
