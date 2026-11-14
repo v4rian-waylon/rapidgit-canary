@@ -14,6 +14,7 @@
 |----|-------------|-----|--------|-------|--------|-------|
 | REQ-R-forge-261114002533 | The canary keeps the rulesets and the rapid-check workflow of run 261114002533 on the forge. | P2 | ✅ done | ✅ `forge-261114002533.txt` | internal | `chore/forge-261114002533` |
 | REQ-R-forge-261114002804 | The canary keeps the rulesets and the rapid-check workflow of run 261114002804 on the forge. | P2 | ✅ done | ✅ `forge-261114002804.txt` | internal | `chore/forge-261114002804` |
+| REQ-R-widget-261114002804 | A widget branch of run 261114002804 runs the forge jobs green. | P1 | ✅ done | ✅ `widget-261114002804.txt` | internal | `feature/widget-261114002804` |
 
 ## Units of Intent
 <!-- NOT binding, NOT protected. Promotes to a Hard Requirement through a branch whose file says Promotes: <slug>. -->
