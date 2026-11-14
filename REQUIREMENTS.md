@@ -12,6 +12,7 @@
 
 | ID | Requirement | Pri | Status | Tests | Source | Trace |
 |----|-------------|-----|--------|-------|--------|-------|
+| REQ-R-dbg-two | A second debug branch of the canary proves a branch push. | P1 | ✅ done | ✅ `dbg2.txt` | internal | `feature/dbg-two` |
 | REQ-R-forge-261114002533 | The canary keeps the rulesets and the rapid-check workflow of run 261114002533 on the forge. | P2 | ✅ done | ✅ `forge-261114002533.txt` | internal | `chore/forge-261114002533` |
 
 ## Units of Intent
