@@ -17,7 +17,8 @@ count and name in these docs equal to the code.
    ref stores them (a safety anchor keeps a branch's fork point, nothing
    more).
 3. One flow. A remote is a transport, not a mode: the same commands work
-   with and without one, and land pushes atomically when there is one.
+   with and without one, and the close of a batch pushes atomically when
+   there is one.
 4. Every guarantee has one enforcement point and one history check
    (`rapid doctor --history`, invariants I1 to I9 in `.rapid/lib/history.sh`).
 5. Land applies the conf committed on dev, never the branch's own copy, so a
@@ -99,18 +100,18 @@ count and name in these docs equal to the code.
   every gate passed. README's quick start sets the gates before setup and
   runs as written (fresh-vendor).
 - A clone that never ran `rapid setup` has no hooks: the verbs that write
-  (branch, land, sync, release) refuse with `rapid setup` instead of working
+  (branch, commit, land, sync, release) refuse with `rapid setup` instead of working
   unguarded, and `rapid status` says what is missing; `check`, `bisect` and
   `doctor` stay usable, since the forge workflow runs them on a runner with
   no hooks.
-- A push that fails while origin is reachable (refused, or the link drops
-  mid-push) undoes the local tag and leaves dev unmoved, so the next land
-  resumes from the same state.
+- A refused close push changes nothing: dev, the tags and the batch stay, and
+  `rapid land` again publishes them. A `land --pr` push that fails undoes its
+  tag and leaves dev unmoved.
 - Safety anchors stay forever (the owner's rule, kept from neo-git). `rapid
   branch` writes the branch `safety/v<series>/<number>.<kind>.<slug>`, as neo-git did, on an
   anchor commit whose only parent is the fork point, so it records who
-  forked and when and two branches never share one. It rides with the branch: pre-push pushes it before a branch
-  push when the remote lacks it, land puts it in its
+  forked and when and two branches never share one. It rides with the branch: pre-push sends it in one push right after the
+  branch push when the remote lacks it, land puts it in its
   atomic push, and `rapid sync --dev` publishes those of offline lands. A
   sync, a rename (which adds the new name's anchor) and a land never
   touch it. pre-push and the agent guard refuse deleting, moving or forging
@@ -306,7 +307,7 @@ count and name in these docs equal to the code.
   rewriting the ref and the agent guard refuses writing, rewriting or
   deleting it by hand. A merge landed before the archive says so.
 - A receipt is never only trusted: pre-push reruns the fast gate on any merge
-  this clone did not gate (land leaves a local proof note naming the merge's
+  this clone did not gate (a `--pr` land and the close of a batch leave a local proof note naming the merge's
   tree and this clone's private id, so a fetched or copied note never
   counts; the agent guard denies writing it by hand), and a dev push must
   carry each new merge's version tag.
@@ -370,16 +371,15 @@ count and name in these docs equal to the code.
 
 ## Layout
 
-Every file of the framework's code, named here so none hides (the docs lint
-checks the list):
+The files of the CLI, its libraries, hooks, lints and runner (the docs lint
+checks the libraries, hooks and lints):
 
 - `rapid`: the CLI, thirteen verbs, one file.
 - `lib/core.sh`: shared helpers, the kinds and the named rules.
 - `lib/message.sh`: the commit and merge message rules and the subject limits.
 - `lib/version.sh`: version math from dev's first-parent line.
 - `lib/policy.sh`: the conf keys and their defaults, the gates, the
-  per-commit fast gate, the owner rule, sizes, tests, gate changes and docs
-  rules.
+  per-commit fast gate, the owner rule, sizes, tests and docs rules.
 - `lib/history.sh`: invariants I1 to I9, the per-clone history checkpoint
   and the gate proofs.
 - `lib/tracker.sh`: the tracker contract.
@@ -390,7 +390,8 @@ checks the list):
 - `lib/judge.sh`: a branch judged by dev's framework: `rapid land`, `commit-msg`
   and `pre-push` exec dev's committed `.rapid` (exported once per dev framework
   tree under `<git common dir>/rapid/judge/`) when the work tree's copy differs.
-- `hooks/pre-commit`: placeholder requirement and `gates_commit` at commit.
+- `hooks/pre-commit`: banned files, the placeholder requirement, the
+  regenerated and staged `REQUIREMENTS.md` and `gates_commit` at commit.
 - `hooks/prepare-commit-msg`: the branch size cap before a commit exists.
 - `hooks/commit-msg`: message, policy and size rules at commit.
 - `hooks/pre-push`: what reaches a shared remote.
@@ -413,30 +414,15 @@ checks the list):
 
 ## Bootstrap of this repository
 
-The root commit is the seed `rapid setup` wrote: the policy files
-(`.rapid/conf`, `.rapid/admins`) and the `.rapid/FRAMEWORK` marker. An agent
-seeded the repository, so it named the owner with
-`rapid setup --owner <email>`: the seed lists the owner as the first admin,
-never the agent, and the whole conf is in the seed.
+The root commit is the seed `rapid setup --owner <email>` wrote: its
+`.rapid/admins` lists the owner as the first admin, not the author of the
+commit.
 
-Everything after the seed is one batch, one branch per feature, each opened
-with `rapid branch` from dev and landed with `rapid land --batch` as its own
-merge with its safety anchor and its vault branch. Every feature lands once,
-in its final form: a file grows by whole functions and by the single lines
-that call them, in final order, so no commit undoes an earlier one and no
-merge calls a function that a later merge brings. The branches arrive speed
-first: the parallel runner with the per-merge proof, the CLI core, branches,
-batch landing, the close and its guards; then each rule in its own branch,
-after what it calls. The spec documents arrive last, in branches of their
-own, because the docs lint compares them with the finished code.
-
-No gate ran at any land: every merge says `Gates: deferred to the close of batch
-<id>`. The last branch landed without `--batch`, and that one close ran `gates_each` (`.rapid/tests/smoke.sh`: every
-shell file parses, `rapid --help` prints, the lints pass) on the own tree of
-every merge, all at once, then the full gate once on the final tree. Both
-records are in the gate log, and nothing else is claimed:
-`git notes --ref=gates show <merge>`. main was not moved, since main is
-production and only the owner promotes.
+Every feature landed as one branch into one batch, the one that began at the
+seed: the receipt of every merge on dev names that batch
+(`Gates: deferred to the close of batch <id>`), and each branch keeps its
+safety anchor and its vault branch. What the close ran on each merge is in
+the gate log, and nothing else is claimed: `git notes --ref=gates show <merge>`.
 
 ## What rapidgit gives up, and why each guarantee holds anyway
 
@@ -456,9 +442,9 @@ production and only the owner promotes.
 | Live canaries on public throwaway repositories | `tests/canary/live.sh`, run by hand in one persistent public canary repository | The gates never run it: live forge behaviour is proven only by a run made by hand. The scenarios drive the forge through a `gh` stub |
 | Reconstruct, shuttle, snapshot and rewrite tooling | out of the core | History quality is enforced at land, not repaired afterwards; the rebuild rules live in the `rebuild.md` lens |
 | The Codex adapter | none; `rapid setup --agent` serves Claude Code only (owner-approved removal 30) | The agent guard, the write guard and the preflight serve Claude Code |
-| The identity map, its known-author checks, its agent rows, the identity verb | none (removed by the owner); the roles moved to `.rapid/admins` | Repository access decides who commits and pushes; the admins release and flip policy, and `rapid setup --owner` names the first one (scenario `setup-owner`) |
+| The table of known authors, its checks, its agent rows and its verb | none (removed by the owner); the roles moved to `.rapid/admins` | Repository access decides who commits and pushes; the admins release and flip policy, and `rapid setup --owner` names the first one (scenario `setup-owner`) |
 | The merge queue that tested ahead of time, its lock and its store | none (removed by the owner) | One close tests one tree; two lands racing for one version take it once, since the version tag is created before dev moves |
-| Bench harness and agent runner | `bench/speed.sh`, `bench/loadbytes.py`, `bench/multiplier.sh`, framework only | The bench measures the flows of rapidgit on scratch repositories; no model is called. A multiplier is printed only against a baseline somebody measured |
+| Bench harness and agent runner | `bench/speed.sh`, `bench/loadbytes.py`, `bench/multiplier.sh`, framework only | The bench measures the flows of rapidgit on scratch repositories; no model is called. A multiplier is printed only against a row of the baseline, marked measured or recorded |
 
 Kept as they were: the message rules, the protected-ref and
 tag rules of pre-push, the agent guard and preflight, the operator-only
@@ -522,11 +508,11 @@ its development described it, and what removes it here.
 ## Measured
 
 This file quotes no timing. The measurements of this repository are records,
-not prose: the duration of its one close and of each per-merge proof is in the
+not prose: the duration of each close and of each per-merge proof is in the
 gate log (`git notes --ref=gates show <merge>`), and `bench/speed.sh` prints
 the time of each flow on the machine that runs it. `bench/multiplier.sh`
 compares like with like, the gated land of the predecessor against a batch
 land plus its share of the close, and prints a multiplier only for a row
-of its baseline; `bench/lean-baseline.md` ships with no row, because the
-predecessor was not benchmarked in the build of this repository, and the
-bench refuses a baseline with no row.
+of its baseline; the rows of `bench/lean-baseline.md` are recorded, read from
+the development record of the predecessor and never timed by a bench, and the
+table says so row by row. The bench refuses a baseline with no row.

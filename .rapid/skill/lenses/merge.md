@@ -29,7 +29,7 @@ tone rules), and check it first with `rapid land --dry-run -F <body>`.
 - This merge only: no prior merges, siblings or future work; absolute terms
   (`on top of`, `extending`, `building on`, other versions, other branches
   are refused by review).
-- Never: `BAK`, `bak import`, `historical import`, `pre ATM role`,
+- Never: `BAK`, `bak import`, `historical import`,
   `captured in`, `from the zip`, `recovered from`, `reconstructed`,
   `WIP snapshot`, `in this zip`, `preflight`, `rebuild` (as a noun),
   `import`, `snapshot`, `recovered`, `WIP`; no hyphenated prose compounds, no

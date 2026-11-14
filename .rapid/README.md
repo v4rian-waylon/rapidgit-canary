@@ -43,9 +43,9 @@ lands with one test and one push (a batch ⊆ the pool).
 cp -R path/to/rapidgit/.rapid .   # vendor the framework, then drop its own
 rm -rf .rapid/tests .rapid/bench .rapid/FRAMEWORK .rapid/admins   # tests, bench, source marker, admins (setup --upgrade does this)
 cat > .rapid/conf <<'CONF'            # your gates first: one shell command each, exit 0 passes
-gates_fast=sh .rapid/lint/run.sh && sh login_test.sh
-gates_full=sh .rapid/lint/run.sh && sh login_test.sh
-gates_release=sh .rapid/lint/run.sh && sh login_test.sh
+gates_fast=bash .rapid/lint/run.sh && sh login_test.sh
+gates_full=bash .rapid/lint/run.sh && sh login_test.sh
+gates_release=bash .rapid/lint/run.sh && sh login_test.sh
 CONF
 printf 'test -f login.sh\n' > login_test.sh # your project's own test
 .rapid/rapid setup                      # hooks, the first admin, main and dev
@@ -73,7 +73,7 @@ After setup a conf change is a `[MODE]` commit.
 
 | Command | Does |
 |---|---|
-| `rapid setup` | hooks, the first admin, seed main and dev; `--owner` names the first admin at the first setup, never its runner; `--agent` guard (`--uninstall`, `--prefix`); `--remote` rulesets and CI (`--repo`, `--dry-run`); `--upgrade` the vendored `.rapid` |
+| `rapid setup` | hooks, the first admin, seed main and dev; `--owner` names the first admin at the first setup, never its runner; `--agent` guard (`--uninstall`, `--dry-run`, `--prefix`); `--remote` rulesets and CI (`--repo`, `--dry-run`); `--upgrade` the vendored `.rapid` |
 | `rapid branch` | start a branch (`-r`, `--proof`, `--ticket`); `--rename`, `--delete-landed`; a reviewer closes the PR of the branch as a rejection, the branch kept (`--reject --reason`, `--mention`, `--dry-run`) |
 | `rapid check` | a gate on the work tree (`--gate`); `--each` the commit audit and the fast gate on every branch commit; `--audit` the deterministic commit audit on the branch or a merge's branch; `--reqs` REQUIREMENTS.md against the register `requirements/` generates (`--write` regenerates it); `--merge` the forge's proof of a `land --pr` candidate; `--judge` an advisory review (`--strict` fails on a finding); `--land` every static land check of each named branch, all branches at once |
 | `rapid commit` | opt-in `--smart`: a fresh model context composes the message for the staged diff, the hooks judge it (`--message-only` prints it) |
@@ -90,12 +90,14 @@ Thirteen verbs, one CLI. The docs are checked against the code by `.rapid/lint/d
 
 ## Read next
 
+- [MANUAL.md](MANUAL.md): the developer manual: every command, flag, conf key, hook, failure and its recovery, the suite and the tools.
 - [RULES.md](RULES.md): branches, commits, merges, versions, invariants, policy.
 - [FLOWS.md](FLOWS.md): every flow as steps, for humans and agents.
 - [DESIGN.md](DESIGN.md): why it is built this way and what it gives up.
 - [tests/SCENARIOS.md](tests/SCENARIOS.md): the scenario matrix that proves it.
 - `bench/` (framework source only): `speed.sh` and `loadbytes.py` measure
   rapidgit's speed and read budget against neo-git (DESIGN.md, Measured).
+- [skill/AGENT.md](skill/AGENT.md): the manual for AI agents: what to do, what never to do, the batch protocol.
 - [skill/SKILL.md](skill/SKILL.md): the loader for AI agents, with its lens
   files (`skill/lenses/`) read one per task, and the map of every neo-git
   lens rule to its home (`skill/lenses/RULE-MAP.md`).

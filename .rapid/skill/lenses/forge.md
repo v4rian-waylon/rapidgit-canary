@@ -1,9 +1,10 @@
 # Lens: forge, CI and tokens
 
 ## Pushes and runs
-- `rapid land`, `rapid land --pr` and `rapid release` push atomically and undo
-  locally when a push fails; verify the result with `git ls-remote origin`
-  when it matters. Push your branch after each commit.
+- The close of `rapid land` pushes atomically; when origin refuses, nothing
+  changes locally, the batch stays and `rapid land` again publishes it.
+  `rapid land --pr` and `rapid release` undo locally when their push fails; verify the result with `git ls-remote origin`
+  when it matters. Share your branch with `rapid sync --push` when no batch is open.
 - When the repository has a forge with the rapid-check workflow, a push is not
   done until its runs are: confirm that rapid-check, commit-audit and
   rapid-linux fired on the pushed sha (a missing run is a finding), wait with

@@ -31,13 +31,14 @@ read only.
   reads as normal development, no rebuild language, nothing invented.
 - A historical bug is replayed faithfully, then fixed in a separate `[FIX]`
   dated today under your own name.
-- Preflight every affected repository first (`git-preflight.sh`), pushed to
-  origin and verified with `git ls-remote` before any rebuild commit; never
-  delete, rewrite or force a preflight; keep them until the owner accepts.
+- Preflight every affected repository first (`git-preflight.sh`: a local
+  branch and a zip, never pushed) before any rebuild commit; never delete or
+  rewrite a preflight; keep them until the owner accepts.
 - Every byte of every snapshot ends reachable from a branch: a branch (landed or
   not) or a preflight.
-- Push each action within seconds and check the remote tip equals local;
-  halt on a mismatch.
+- Share a branch with `rapid sync --push` while no batch is open; dev, tags
+  and anchors go out only in the close's one push. After that push check that
+  origin's dev equals local; halt on a mismatch.
 - Landing on an existing dev needs the owner's verbatim grant, recorded;
   without it the work stays on branches not landed yet. A release (dev to main) is
   the owner's `rapid release`; when a snapshot closes, run `rapid release
@@ -55,15 +56,14 @@ read only.
   NN from 01 shared across the repositories of one zip, titled
   `[NEW] WIP snapshot YYYY-MM-DD`, an orphan commit of the repository's full
   zip content minus `.git`, `__MACOSX`, `.DS_Store`, `.auth/`, `keys/`,
-  certificates, `node_modules/`, `.env`, `build/`, `build-*/`, `exports/`,
+  certificates, `node_modules/`, `.env`, `build/`, `build-*/`,
   `*.zip` and workspace bans, dated at the zip's mtime, built in a scratch
   `mktemp -d`, never in the working repository; builds may run ten wide.
 - Per zip: extract to a scratch directory keeping mtimes, find the touched
   repositories, plan the branches (`commit.md`), commit with the date rules,
   land, check, then hand the release to the owner. Archive the zip to the
   backups only after every check passes; never delete the latest zip.
-- Lost local preflight ref: restore it from origin; origin lost: rebuild it
-  from the zip.
+- Lost local preflight ref: rebuild it from the zip.
 
 ## Folder snapshots
 - The working tree is irreplaceable: surface and ask by default. Scan about
@@ -75,13 +75,12 @@ read only.
   hanging (`gh auth status`, ssh `BatchMode`) and halt until they work;
   never push before the probe.
 - Confirm the full summary and wait for an explicit yes; after it, ask only
-  before irreversible steps (reach the owner by voice where the workspace
-  provides it).
+  before irreversible steps.
 - Snapshots of one target run in chronological order, each against the
   previous one's commits. Back up first: `cp -pR` the snapshots, `git clone
-  --mirror` the targets, push a preflight.
+  --mirror` the targets, take a preflight.
 - Scope excludes `.git`, `node_modules`, `dist`, `build*`, lock files,
-  `*.log`, `.DS_Store`, `.session`, `*.bak`, `*_old.qml` and workspace bans,
+  `*.log`, `.DS_Store`, `.session`, `*.bak` and workspace bans,
   applies the path prefix, writes `coverage.txt`.
 - Parent by content match: 100 % skip, 90 % and up is the parent, below with
   a note, ties to the earliest author date; under about 30 % first check the
@@ -101,9 +100,7 @@ read only.
 
 ## Old repositories into one (reconstruct)
 - Catalog the target module map first; never invent a module or class and
-  document the gaps. C++ layout: `include/<ns>/<module>`, `src`,
-  `third_party` only for unmanaged dependencies, each module independently
-  buildable with CMake, sub-namespaces past three or four concerns.
+  document the gaps. Each module builds on its own.
 - Replay real commits where history exists (keep merges with
   `--rebase-merges`; an empty merge after a path filter means cut before it;
   never replay a topic the source later removed); derive dates from mtimes
@@ -115,16 +112,7 @@ read only.
 - Compile and test at every commit and merge; an MWE per module makes real
   calls, runs in the background under a kill timer, never opens modal system
   UI, cleans up; a final integration build links every module.
-- Build traps: force_load or whole-archive as INTERFACE for self-registering
-  objects, split by BUILD_INTERFACE/INSTALL_INTERFACE and proved by an
-  external consumer's symbol table; Objective-C++ outside C++ namespaces;
-  `-fobjc-arc` per file; the widgets component; PUBLIC dependencies for
-  header-only inlines with `find_dependency` for PUBLIC sibling links;
-  non-recursive per-target header globs; `__has_include` directories
-  PRIVATE.
-- Distribution: binaries through a separate dist repository, install EXPORT
-  and Config files, FetchContent `SOURCE_SUBDIR` for internal consumers;
-  verify every artifact, not a sample; a dev tag is never a release, and a
+- Distribution: verify every artifact, not a sample; a dev tag is never a release, and a
   release needs the owner's word and a throwaway consumer link test.
 - Scrub remnants across content, every path ever, messages, diffs, ref
   names and identities (codenames, personal paths, self-references,

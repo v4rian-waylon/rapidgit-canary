@@ -9,11 +9,8 @@ gates lack is run by hand and its log kept.
 ## Compile
 - The gates compile the project: Node runs `npm install --silent --no-audit
   --no-fund` (always, even when `node_modules` exists) and `node --check`
-  on every JS file outside `node_modules` and build output; a Qt library
-  configures and builds into a clean build directory (the static and QML
-  plugin libraries emitted); a Qt app builds against its adjacent libraries
-  (for a historical point, each library at its latest preflight dated at or
-  before that point) and passes when the `.app` is emitted. Use the
+  on every JS file outside `node_modules` and build output; a compiled
+  project configures and builds into a clean build directory. Use the
   workspace's build tool when it has one.
 - Only the build's exit code counts, never the warnings. Logs go to a
   per-run `mktemp -d` directory: the log is the audit trail. Up to four
@@ -46,7 +43,7 @@ gates lack is run by hand and its log kept.
 ## Coverage (rebuilds from snapshots)
 - A preflight tree is byte-identical to its snapshot; after each branch lands,
   dev's tree equals the snapshot minus the sensitive files, `README.md` and
-  `.gitignore` (and `aqtinstall.log`), by `diff -r --brief` with exactly
+  `.gitignore`, by `diff -r --brief` with exactly
   those excludes, never wider.
 - Pass: zero differing files, zero only in the repository beyond the
   allowed, zero only in the snapshot. A differing file is read with
